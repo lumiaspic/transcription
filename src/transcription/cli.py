@@ -201,6 +201,35 @@ def devices() -> None:
         typer.echo(f"  [{d.kind:7}] {d.name}{marker}")
 
 
+# ---------- recover ----------
+
+@app.command()
+def recover(
+    no_enqueue: bool = typer.Option(
+        False, "--no-enqueue",
+        help="Only finalize meta.json; don't enqueue transcription jobs.",
+    ),
+) -> None:
+    """Recover orphan recordings (PC shutdown / crash before clean Stop).
+
+    Scans the recordings/ directory for dirs that contain audio files but no
+    meta.json -- typical sign of a recorder process killed mid-write. Computes
+    duration from the audio file, writes meta.json with `recovered: true`,
+    and enqueues a transcription job.
+    """
+    from .pipeline.recovery import recover_all
+    results = recover_all(enqueue=not no_enqueue)
+    if not results:
+        typer.echo("No orphan recordings found.")
+        return
+    for o, job_id in results:
+        tag = ",".join(o.tracks_found)
+        msg = f"Recovered {o.rec_id} ({o.duration_seconds:.1f}s, tracks={tag})"
+        if job_id:
+            msg += f" -> enqueued as job #{job_id}"
+        typer.secho(msg, fg=typer.colors.GREEN)
+
+
 # ---------- doctor ----------
 
 @app.command()
