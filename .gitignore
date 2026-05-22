@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Envs
+.venv/
+.env
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Project data
+recordings/
+models/
+logs/
+*.wav
+*.flac
+*.mkv
+*.mp4
+
+# IDE
+.vscode/
+.idea/
+*.swp

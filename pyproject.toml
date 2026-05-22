@@ -1,0 +1,47 @@
+[project]
+name = "transcription"
+version = "0.0.1"
+description = "Local Windows audio capture + WhisperX transcription pipeline"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "soundcard>=0.4.3",
+    "soundfile>=0.12.1",
+    "numpy>=1.24",
+    "typer>=0.12",
+    "keyring>=24",
+    "tomli-w>=1.0",
+]
+
+[project.scripts]
+transcription = "transcription.cli:app"
+
+[project.optional-dependencies]
+transcribe = [
+    # setuptools<81 because ctranslate2 still imports pkg_resources,
+    # which was removed in setuptools 81.
+    "setuptools<81",
+    "torch>=2.7.1",
+    "torchaudio>=2.7.1",
+    # ctranslate2 4.5+ links against cuDNN 9, which matches what torch 2.5
+    # bundles. ctranslate2 4.4 needs cuDNN 8 and breaks on this combo.
+    "ctranslate2>=4.5",
+    "whisperx>=3.1.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/transcription"]
+
+# PyTorch CUDA wheels are not on PyPI - they live on download.pytorch.org.
+# We tell uv to fetch torch and torchaudio from the CUDA 12.4 index.
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
