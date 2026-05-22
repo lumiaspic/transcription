@@ -82,17 +82,31 @@ def record(
     no_diarize: bool = typer.Option(
         False, "--no-diarize", help="Skip diarization on the system track for the queued job.",
     ),
+    sample_rate: int = typer.Option(
+        None, "--sample-rate",
+        help="Recording sample rate in Hz (overrides config). Default 16000 (matches Whisper/pyannote internal rate).",
+    ),
+    format: str = typer.Option(
+        None, "--format",
+        help="Recording format: 'flac' or 'wav' (overrides config). Default 'flac'.",
+    ),
 ) -> None:
     """Capture mic + system audio, then enqueue it for transcription."""
     rec_id = name or _new_recording_id()
     rec_dir = _recording_path(rec_id)
     rec_dir.mkdir(parents=True, exist_ok=True)
 
+    c = cfg.load_config()
+    sr = sample_rate or int(c.get("recording_sample_rate", 16000))
+    fmt = (format or c.get("recording_format", "flac")).lower()
+
     typer.echo(f"Recording -> {rec_dir}")
     typer.echo(f"  mic    : {mic or '(default)'}")
     typer.echo(f"  system : {speaker or '(default)'}")
+    typer.echo(f"  audio  : {sr} Hz {fmt}")
 
-    recorder = DualRecorder(rec_dir, mic_name=mic, speaker_name=speaker)
+    recorder = DualRecorder(rec_dir, mic_name=mic, speaker_name=speaker,
+                            sample_rate=sr, format=fmt)
     recorder.start()
     started = time.time()
     try:
@@ -114,6 +128,8 @@ def record(
         "created_at": dt.datetime.now().isoformat(timespec="seconds"),
         "duration_seconds": round(elapsed, 1),
         "tracks": ["mic", "system"],
+        "sample_rate": sr,
+        "format": fmt,
         "transcribed": False,
     })
     typer.secho(f"Done. {elapsed:.1f}s captured. ID: {rec_id}", fg=typer.colors.GREEN)
