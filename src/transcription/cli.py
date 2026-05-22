@@ -1,13 +1,18 @@
-"""Typer CLI - the user-facing surface of Jalon 1.
+"""Typer CLI - the user-facing surface.
 
 Commands:
-    transcription record [--duration N] [--name X]
-    transcription transcribe <id> [--model X] [--no-diarize]
+    transcription record [--duration N] [--name X] [--no-transcribe] [--model X]
+    transcription transcribe <id> [--model X] [--no-diarize] [--language X]
     transcription list
     transcription devices
+    transcription daemon [--poll-interval N]
+    transcription jobs list [--status pending|running|done|failed|all]
+    transcription jobs show <job-id>
+    transcription jobs retry <job-id>
     transcription config show
     transcription config set-token <service>
     transcription config remove-token <service>
+    transcription config set <key> <value>
 """
 from __future__ import annotations
 
@@ -23,12 +28,11 @@ import typer
 from . import config as cfg
 from .audio import devices as audio_devices
 from .audio.recorder import DualRecorder
-from .backends.base import DiarizationUnavailable, TranscriptResult
 from .backends.whisperx_local import WhisperXLocalBackend
-from .export.format import write_all
-from .export.merge import merge_to_markdown
 from .paths import recordings_dir
-from .pipeline.speakers import SpeakerProfile, profile_for_track
+from .pipeline.jobs import JobQueue
+from .pipeline.transcribe import run_transcription
+from .pipeline.worker import Worker
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -36,7 +40,9 @@ log = logging.getLogger("transcription")
 
 app = typer.Typer(help="Local audio capture + WhisperX transcription pipeline.", no_args_is_help=True)
 config_app = typer.Typer(help="Configure tokens and settings.", no_args_is_help=True)
+jobs_app = typer.Typer(help="Manage queued transcription jobs.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
+app.add_typer(jobs_app, name="jobs")
 
 
 # ---------- helpers ----------
@@ -68,8 +74,16 @@ def record(
     name: str = typer.Option(None, help="Custom name; default = current timestamp."),
     mic: str = typer.Option(None, help="Override mic device name."),
     speaker: str = typer.Option(None, help="Override speaker (loopback source) name."),
+    no_transcribe: bool = typer.Option(
+        False, "--no-transcribe", help="Don't enqueue a transcription job at the end.",
+    ),
+    model: str = typer.Option(None, help="Whisper model for the queued job (overrides config)."),
+    language: str = typer.Option(None, help="Force language code (e.g. 'fr') for the queued job."),
+    no_diarize: bool = typer.Option(
+        False, "--no-diarize", help="Skip diarization on the system track for the queued job.",
+    ),
 ) -> None:
-    """Capture mic + system audio into two separate WAV files."""
+    """Capture mic + system audio, then enqueue it for transcription."""
     rec_id = name or _new_recording_id()
     rec_dir = _recording_path(rec_id)
     rec_dir.mkdir(parents=True, exist_ok=True)
@@ -104,8 +118,26 @@ def record(
     })
     typer.secho(f"Done. {elapsed:.1f}s captured. ID: {rec_id}", fg=typer.colors.GREEN)
 
+    if no_transcribe:
+        typer.echo("Skipping job enqueue (--no-transcribe).")
+        return
 
-# ---------- transcribe ----------
+    queue = JobQueue()
+    job_id = queue.enqueue(
+        recording_id=rec_id,
+        recording_dir=rec_dir,
+        model=model,
+        language=language,
+        diarize=not no_diarize,
+    )
+    typer.secho(
+        f"Enqueued as job #{job_id}. "
+        f"Start a daemon to process it: `transcription daemon`",
+        fg=typer.colors.CYAN,
+    )
+
+
+# ---------- transcribe (synchronous) ----------
 
 @app.command()
 def transcribe(
@@ -114,58 +146,33 @@ def transcribe(
     no_diarize: bool = typer.Option(False, "--no-diarize", help="Disable diarization on the system track."),
     language: str = typer.Option(None, help="ISO code (e.g. 'fr'). Auto-detect if omitted."),
 ) -> None:
-    """Run WhisperX on a recording's mic.wav and system.wav."""
+    """Run WhisperX on a recording's mic.wav and system.wav (synchronous; blocks until done).
+
+    For background processing, use `record` (auto-enqueue) + `daemon` instead.
+    """
     rec_dir = _recording_path(rec_id)
     if not rec_dir.exists():
         typer.secho(f"Recording not found: {rec_dir}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    tracks = [f for f in ("mic", "system") if (rec_dir / f"{f}.wav").exists()]
-    if not tracks:
-        typer.secho(f"No mic.wav / system.wav in {rec_dir}", fg=typer.colors.RED)
+    backend = WhisperXLocalBackend(model=model)
+    try:
+        results = run_transcription(
+            rec_dir=rec_dir,
+            backend=backend,
+            language=language,
+            diarize=not no_diarize,
+            progress=lambda msg: typer.echo(msg),
+        )
+    except FileNotFoundError as e:
+        typer.secho(str(e), fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    backend = WhisperXLocalBackend(model=model)
-    results: list[TranscriptResult] = []
-
-    for track in tracks:
-        wav = rec_dir / f"{track}.wav"
-        profile = profile_for_track(track)
-        if no_diarize and profile == SpeakerProfile.MULTI:
-            profile = SpeakerProfile.SOLO
-
-        typer.echo(f"\n--- {track}.wav (profile={profile.value}) ---")
-        t0 = time.time()
-        try:
-            result = backend.transcribe(wav, profile=profile, language=language)
-        except DiarizationUnavailable as e:
-            typer.secho(f"Diarization unavailable, falling back to single-speaker: {e}",
-                        fg=typer.colors.YELLOW)
-            result = backend.transcribe(wav, profile=SpeakerProfile.SOLO, language=language)
-        result.track = track
-        elapsed = time.time() - t0
-        rtf = result.duration / elapsed if elapsed > 0 else 0
-        typer.echo(f"  {len(result.segments)} segments, {result.duration:.1f}s audio, "
-                   f"{elapsed:.1f}s wall ({rtf:.1f}x realtime)")
-        paths = write_all(result, rec_dir, stem=track)
-        typer.echo(f"  -> {', '.join(p.name for p in paths.values())}")
-        results.append(result)
-
-    merged = rec_dir / "transcript.md"
-    merge_to_markdown(results, merged)
-    typer.echo(f"\nMerged transcript -> {merged}")
-
-    meta = _read_meta(rec_dir)
-    meta["transcribed"] = True
-    meta["transcribed_at"] = dt.datetime.now().isoformat(timespec="seconds")
-    meta["backend"] = backend.name
-    meta["model"] = results[0].model if results else None
-    _write_meta(rec_dir, meta)
-
-    typer.secho("Done.", fg=typer.colors.GREEN)
+    typer.echo(f"\nMerged transcript -> {rec_dir / 'transcript.md'}")
+    typer.secho(f"Done. {len(results)} track(s) transcribed.", fg=typer.colors.GREEN)
 
 
-# ---------- list ----------
+# ---------- list (recordings) ----------
 
 @app.command("list")
 def list_recordings() -> None:
@@ -192,6 +199,79 @@ def devices() -> None:
     for d in audio_devices.list_devices():
         marker = " (default)" if d.is_default else ""
         typer.echo(f"  [{d.kind:7}] {d.name}{marker}")
+
+
+# ---------- daemon ----------
+
+@app.command()
+def daemon(
+    poll_interval: float = typer.Option(2.0, "--poll-interval", help="Seconds between queue polls."),
+) -> None:
+    """Run the background worker: drains the job queue forever (Ctrl+C to stop).
+
+    Recovers orphan 'running' jobs on startup (daemon was killed mid-job).
+    Keeps loaded models cached in VRAM across jobs.
+    """
+    worker = Worker(poll_interval=poll_interval)
+    worker.run_forever()
+
+
+# ---------- jobs ----------
+
+def _fmt_job_row(j) -> str:
+    err = (j.error or "").replace("\n", " ")[:50]
+    return (
+        f"{j.id:>4} {j.recording_id:<22} {j.status:<8} "
+        f"{(j.model or '-'):<10} {j.created_at:<20} {err}"
+    )
+
+
+@jobs_app.command("list")
+def jobs_list(
+    status: str = typer.Option(
+        "all", help="pending | running | done | failed | all",
+    ),
+    limit: int = typer.Option(50, help="Max rows."),
+) -> None:
+    """List queued jobs."""
+    queue = JobQueue()
+    items = queue.list_jobs(status=status, limit=limit)
+    if not items:
+        typer.echo(f"No jobs (status={status}).")
+        return
+    typer.echo(
+        f"{'ID':>4} {'RECORDING':<22} {'STATUS':<8} {'MODEL':<10} {'CREATED':<20} ERROR"
+    )
+    for j in items:
+        typer.echo(_fmt_job_row(j))
+
+
+@jobs_app.command("show")
+def jobs_show(job_id: int = typer.Argument(...)) -> None:
+    """Show full details of one job (including its full error text)."""
+    queue = JobQueue()
+    j = queue.get(job_id)
+    if not j:
+        typer.secho(f"No job with id {job_id}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+    for k, v in vars(j).items():
+        typer.echo(f"  {k:<14} {v}")
+
+
+@jobs_app.command("retry")
+def jobs_retry(job_id: int = typer.Argument(...)) -> None:
+    """Re-queue a failed job."""
+    queue = JobQueue()
+    if queue.retry(job_id):
+        typer.secho(
+            f"Job {job_id} re-queued. Make sure a daemon is running.",
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho(
+            f"Job {job_id} could not be re-queued (not in 'failed' state, or doesn't exist).",
+            fg=typer.colors.YELLOW,
+        )
 
 
 # ---------- config ----------
