@@ -14,7 +14,8 @@ import logging
 import time
 from pathlib import Path
 
-from ..backends.whisperx_local import WhisperXLocalBackend
+from ..backends.base import TranscriptionBackend
+from ..backends.factory import get_backend
 from .jobs import Job, JobQueue
 from .transcribe import run_transcription
 
@@ -26,7 +27,7 @@ class Worker:
         self.queue = queue or JobQueue()
         self.poll_interval = poll_interval
         # Keyed by model name (None means "use config default", kept distinct as well).
-        self._backends: dict[str, WhisperXLocalBackend] = {}
+        self._backends: dict[str, TranscriptionBackend] = {}
 
     # ---------- public API ----------
 
@@ -47,11 +48,11 @@ class Worker:
 
     # ---------- internals ----------
 
-    def _get_backend(self, model: str | None) -> WhisperXLocalBackend:
+    def _get_backend(self, model: str | None) -> TranscriptionBackend:
         key = model or "__config_default__"
         if key not in self._backends:
             log.info("Loading backend (model=%s)", model or "config default")
-            self._backends[key] = WhisperXLocalBackend(model=model)
+            self._backends[key] = get_backend(model=model)
         return self._backends[key]
 
     def _execute(self, job: Job) -> None:
