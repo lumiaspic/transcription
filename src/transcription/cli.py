@@ -201,6 +201,26 @@ def devices() -> None:
         typer.echo(f"  [{d.kind:7}] {d.name}{marker}")
 
 
+# ---------- gui ----------
+
+@app.command()
+def gui(
+    port: int = typer.Option(8765, help="HTTP port for the embedded server."),
+    browser: bool = typer.Option(
+        False, "--browser",
+        help="Open in default browser instead of a native window (useful for devtools).",
+    ),
+) -> None:
+    """Launch the desktop app (NiceGUI in a native window).
+
+    Starts an internal Worker thread that drains the job queue while the GUI
+    is open. Do NOT run `transcription daemon` in another terminal at the
+    same time -- both would race on the same queue.
+    """
+    from .ui.app import run_gui
+    run_gui(port=port, native=not browser)
+
+
 # ---------- daemon ----------
 
 @app.command()

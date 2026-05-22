@@ -26,6 +26,9 @@ transcribe = [
     # bundles. ctranslate2 4.4 needs cuDNN 8 and breaks on this combo.
     "ctranslate2>=4.5",
     "whisperx>=3.1.1",
+    # UI (NiceGUI + native window via Microsoft Edge WebView2, preinstalled on Win11)
+    "nicegui>=2.0",
+    "pywebview>=5.0",
 ]
 
 [build-system]
