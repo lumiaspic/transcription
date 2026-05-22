@@ -30,6 +30,7 @@ KNOWN_TOKEN_SERVICES = {
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "backend": "whisperx_local",
+    "backend_mode": None,  # None = unset; set by first-run wizard. local_gpu|local_cpu|remote_api
     "model": "small",
     "language": None,  # None = auto-detect
     "compute_type_cuda": "float16",
