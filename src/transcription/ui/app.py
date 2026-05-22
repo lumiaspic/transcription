@@ -16,7 +16,9 @@ from pathlib import Path
 
 from nicegui import ui
 
+from .. import config as cfg
 from ..paths import recordings_dir
+from ..pipeline.hardware import HardwareProbe
 from .state import STATE
 
 log = logging.getLogger(__name__)
@@ -246,6 +248,85 @@ def _on_job_row_click(args) -> None:
             _open_folder(p)
 
 
+# ---------- first-run wizard ----------
+
+def _build_wizard() -> None:
+    """One-screen wizard shown the very first time the GUI is launched.
+
+    Picks the backend mode (local GPU / local CPU / remote API) based on
+    detected hardware. The choice is persisted in config; subsequent
+    launches skip this and go straight to the main UI.
+    """
+    hw = HardwareProbe.detect()
+
+    with ui.column().classes("w-full max-w-2xl mx-auto p-6 gap-4"):
+        ui.label("Welcome").classes("text-3xl font-bold")
+        ui.label(
+            "First-run setup. Pick how transcription should run on this machine. "
+            "You can change this later via `transcription config set backend_mode <mode>`."
+        ).classes("text-gray-600")
+
+        # Detected hardware
+        with ui.card().classes("w-full"):
+            ui.label("Detected hardware").classes("text-lg font-semibold")
+            ui.label(f"• Platform : {hw.platform}").classes("font-mono text-sm")
+            ui.label(f"• CPU      : {hw.cpu_cores} cores").classes("font-mono text-sm")
+            if hw.has_cuda:
+                gpu = f"• GPU      : {hw.gpu_name} — {hw.vram_gb:.1f} GB VRAM"
+                ui.label(gpu).classes("font-mono text-sm text-green-700")
+            else:
+                ui.label("• GPU      : none detected").classes("font-mono text-sm text-yellow-700")
+            ui.label(f"• Python   : {hw.python_version}").classes("font-mono text-sm")
+
+        # Backend mode picker
+        with ui.card().classes("w-full"):
+            ui.label("Backend mode").classes("text-lg font-semibold")
+
+            # Build options with informative labels. Disabled-state is communicated
+            # via the label text and validated on save (NiceGUI radio has no
+            # per-option disabled flag).
+            gpu_label = (
+                "Local — NVIDIA GPU (recommended): WhisperX runs on your GPU. "
+                "All data stays on this machine."
+                if hw.has_cuda else
+                "Local — NVIDIA GPU (DISABLED: no GPU detected)"
+            )
+            cpu_label = (
+                "Local — CPU only: slow (~30-60 min per hour of audio), "
+                "but all-local and works on any machine."
+            )
+            remote_label = "Remote API (coming soon — not implemented yet)"
+
+            options = {
+                "local_gpu": gpu_label,
+                "local_cpu": cpu_label,
+                "remote_api": remote_label,
+            }
+            default = "local_gpu" if hw.has_cuda else "local_cpu"
+            choice = ui.radio(options, value=default).props("inline=false").classes("w-full")
+
+            def _save() -> None:
+                v = choice.value
+                if v == "local_gpu" and not hw.has_cuda:
+                    ui.notify(
+                        "No CUDA GPU detected — pick Local CPU instead.",
+                        type="negative",
+                    )
+                    return
+                if v == "remote_api":
+                    ui.notify(
+                        "Remote API backend is not implemented yet. "
+                        "Pick a local option for now.",
+                        type="negative",
+                    )
+                    return
+                cfg.set_config_key("backend_mode", v)
+                ui.notify(f"Saved backend_mode={v}. Reloading…", type="positive")
+                ui.navigate.reload()
+
+            ui.button("Save and continue", on_click=_save).props("color=positive size=lg")
+
+
 # ---------- entry point ----------
 
 def run_gui(*, port: int = 8765, native: bool = True) -> None:
@@ -263,7 +344,11 @@ def run_gui(*, port: int = 8765, native: bool = True) -> None:
     # "Script mode requires a valid script file" error.
     @ui.page("/")
     def _index() -> None:
-        _build_ui()
+        # Dispatch: wizard on first run, main UI otherwise.
+        if cfg.load_config().get("backend_mode") is None:
+            _build_wizard()
+        else:
+            _build_ui()
 
     ui.run(
         title="Transcription",
