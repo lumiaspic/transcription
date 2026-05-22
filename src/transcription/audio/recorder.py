@@ -1,6 +1,11 @@
-"""Dual-track recorder: mic + system loopback, written as 2 separate WAV files.
+"""Dual-track recorder: mic + system loopback, written as 2 separate FLAC files.
 
 Streams to disk in small chunks - bounded memory regardless of recording length.
+
+Format: FLAC (lossless, ~50% smaller than the equivalent PCM WAV). WhisperX
+loads any audio format via ffmpeg, so downstream code doesn't care. Old
+recordings still on disk as .wav remain readable thanks to the backward-
+compatible track lookup in pipeline/transcribe.py.
 """
 from __future__ import annotations
 
@@ -18,6 +23,7 @@ log = logging.getLogger(__name__)
 SAMPLE_RATE = 48_000
 CHUNK_SECONDS = 0.1  # 100 ms blocks; small enough for responsive stop, big enough to avoid syscall thrash
 CHUNK_FRAMES = int(SAMPLE_RATE * CHUNK_SECONDS)
+TRACK_EXT = "flac"
 
 
 @dataclass
@@ -38,6 +44,7 @@ def _stream_track(spec: TrackSpec, stop: threading.Event) -> None:
             samplerate=SAMPLE_RATE,
             channels=spec.channels,
             subtype="PCM_16",
+            format="FLAC",
         ) as f:
             while not stop.is_set():
                 data = rec.record(numframes=CHUNK_FRAMES)
@@ -65,8 +72,8 @@ class DualRecorder:
         speaker_name: str | None = None,
     ) -> None:
         self.out_dir = out_dir
-        self.mic_path = out_dir / "mic.wav"
-        self.system_path = out_dir / "system.wav"
+        self.mic_path = out_dir / f"mic.{TRACK_EXT}"
+        self.system_path = out_dir / f"system.{TRACK_EXT}"
 
         mic = devices.get_mic(mic_name)
         loopback = devices.get_system_loopback(speaker_name)
