@@ -146,7 +146,7 @@ def transcribe(
     no_diarize: bool = typer.Option(False, "--no-diarize", help="Disable diarization on the system track."),
     language: str = typer.Option(None, help="ISO code (e.g. 'fr'). Auto-detect if omitted."),
 ) -> None:
-    """Run WhisperX on a recording's mic.wav and system.wav (synchronous; blocks until done).
+    """Run WhisperX on a recording's mic and system audio (synchronous; blocks until done).
 
     For background processing, use `record` (auto-enqueue) + `daemon` instead.
     """

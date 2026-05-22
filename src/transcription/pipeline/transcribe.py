@@ -22,6 +22,21 @@ log = logging.getLogger(__name__)
 ProgressCb = Optional[Callable[[str], None]]
 
 KNOWN_TRACKS = ("mic", "system")
+# Audio extensions we look for, in priority order. New recordings are FLAC;
+# older recordings are WAV and stay readable.
+TRACK_EXTS = ("flac", "wav")
+
+
+def find_track_file(rec_dir: Path, track: str) -> Path | None:
+    """Return the audio file for `track` in `rec_dir`, or None if missing.
+
+    Looks for FLAC first (new format), then WAV (legacy recordings).
+    """
+    for ext in TRACK_EXTS:
+        p = rec_dir / f"{track}.{ext}"
+        if p.exists():
+            return p
+    return None
 
 
 def _read_meta(rec_dir: Path) -> dict:
@@ -43,7 +58,7 @@ def run_transcription(
 ) -> list[TranscriptResult]:
     """Transcribe all known tracks in a recording directory.
 
-    - Reads `mic.wav` / `system.wav` if they exist.
+    - Reads `mic.{flac,wav}` / `system.{flac,wav}` if they exist.
     - Writes per-track `.txt` / `.srt` / `.json`.
     - Writes merged `transcript.md`.
     - Updates `meta.json` with transcription status.
@@ -54,22 +69,28 @@ def run_transcription(
     if not rec_dir.exists():
         raise FileNotFoundError(f"Recording dir not found: {rec_dir}")
 
-    tracks = [t for t in KNOWN_TRACKS if (rec_dir / f"{t}.wav").exists()]
-    if not tracks:
-        raise FileNotFoundError(f"No {'/'.join(f'{t}.wav' for t in KNOWN_TRACKS)} in {rec_dir}")
+    track_files: list[tuple[str, Path]] = []
+    for t in KNOWN_TRACKS:
+        p = find_track_file(rec_dir, t)
+        if p is not None:
+            track_files.append((t, p))
+    if not track_files:
+        exts = "|".join(TRACK_EXTS)
+        raise FileNotFoundError(
+            f"No {{{'|'.join(KNOWN_TRACKS)}}}.{{{exts}}} in {rec_dir}"
+        )
 
     results: list[TranscriptResult] = []
-    for track in tracks:
-        wav = rec_dir / f"{track}.wav"
+    for track, audio_path in track_files:
         profile = profile_for_track(track)
         if not diarize and profile == SpeakerProfile.MULTI:
             profile = SpeakerProfile.SOLO
 
         if progress:
-            progress(f"Transcribing {track}.wav (profile={profile.value})")
+            progress(f"Transcribing {audio_path.name} (profile={profile.value})")
         t0 = time.time()
         try:
-            result = backend.transcribe(wav, profile=profile, language=language)
+            result = backend.transcribe(audio_path, profile=profile, language=language)
         except DiarizationUnavailable as e:
             log.warning("Diarization unavailable on %s, falling back to SOLO: %s", track, e)
             if progress:
