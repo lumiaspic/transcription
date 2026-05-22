@@ -106,8 +106,10 @@ class WhisperXLocalBackend(TranscriptionBackend):
         try:
             import whisperx
             log.info("Running pyannote diarization...")
+            # WhisperX 3.8.x: param is `token=`, default model is
+            # pyannote/speaker-diarization-community-1.
             diarize_pipeline = whisperx.diarize.DiarizationPipeline(
-                use_auth_token=token, device=device
+                token=token, device=device,
             )
             diarize_segments = diarize_pipeline(audio)
             assigned = whisperx.assign_word_speakers(diarize_segments, transcribe_result)
