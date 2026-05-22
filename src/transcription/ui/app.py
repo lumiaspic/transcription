@@ -77,13 +77,20 @@ def _stop_recording_and_enqueue() -> None:
     rec_dir = STATE.recording.rec_dir
     elapsed = STATE.end_recording()
 
-    # Initial meta (the worker will update transcribed/transcribed_at later)
+    # Initial meta (the worker will update transcribed/transcribed_at later).
+    # `sample_rate` / `format` are read from the recorder instance that was
+    # just used, so the meta matches what was actually written to disk.
+    recorder = STATE.recording.recorder
+    sr = getattr(recorder, "sample_rate", None) if recorder else None
+    fmt = getattr(recorder, "format", None) if recorder else None
     (rec_dir / "meta.json").write_text(
         json.dumps({
             "id": rec_id,
             "created_at": dt.datetime.now().isoformat(timespec="seconds"),
             "duration_seconds": round(elapsed, 1),
             "tracks": ["mic", "system"],
+            "sample_rate": sr,
+            "format": fmt,
             "transcribed": False,
         }, indent=2),
         encoding="utf-8",

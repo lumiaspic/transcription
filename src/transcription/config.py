@@ -36,6 +36,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "compute_type_cuda": "float16",
     "compute_type_cpu": "int8",
     "recordings_dir": None,  # None = ./recordings in cwd
+    # Audio recording knobs. Whisper AND pyannote both resample to 16 kHz
+    # internally, so 16 kHz is optimal for the transcription use case
+    # (~6× smaller than 48 kHz with zero accuracy impact). Bump to 48000 if
+    # you also want playback-quality archives.
+    "recording_sample_rate": 16000,
+    "recording_format": "flac",  # "flac" (lossless, ~50% of WAV) | "wav"
 }
 
 

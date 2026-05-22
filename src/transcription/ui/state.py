@@ -73,7 +73,14 @@ class AppState:
     # ---------- recording ----------
 
     def begin_recording(self, rec_id: str, rec_dir: Path) -> None:
-        recorder = DualRecorder(rec_dir)
+        # Late import to avoid the import cycle config -> paths -> config.
+        from .. import config as cfg
+        c = cfg.load_config()
+        recorder = DualRecorder(
+            rec_dir,
+            sample_rate=int(c.get("recording_sample_rate", 16000)),
+            format=(c.get("recording_format") or "flac").lower(),
+        )
         recorder.start()
         self.recording = RecordingState(
             active=True,
