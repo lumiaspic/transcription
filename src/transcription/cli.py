@@ -28,7 +28,7 @@ import typer
 from . import config as cfg
 from .audio import devices as audio_devices
 from .audio.recorder import DualRecorder
-from .backends.whisperx_local import WhisperXLocalBackend
+from .backends.factory import get_backend
 from .paths import recordings_dir
 from .pipeline.jobs import JobQueue
 from .pipeline.transcribe import run_transcription
@@ -155,7 +155,7 @@ def transcribe(
         typer.secho(f"Recording not found: {rec_dir}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    backend = WhisperXLocalBackend(model=model)
+    backend = get_backend(model=model)
     try:
         results = run_transcription(
             rec_dir=rec_dir,
@@ -199,6 +199,41 @@ def devices() -> None:
     for d in audio_devices.list_devices():
         marker = " (default)" if d.is_default else ""
         typer.echo(f"  [{d.kind:7}] {d.name}{marker}")
+
+
+# ---------- doctor ----------
+
+@app.command()
+def doctor() -> None:
+    """Print health checks: Python, PyTorch+CUDA, HF token, backend mode, jobs DB.
+
+    Use this first whenever something feels off. It surfaces config issues
+    before they blow up the first job 15 seconds in.
+    """
+    from .pipeline.hardware import HardwareProbe
+    from .pipeline.health import Severity, run_health_checks
+
+    hw = HardwareProbe.detect()
+    typer.echo(f"Platform   : {hw.platform}")
+    typer.echo(f"CPU cores  : {hw.cpu_cores}")
+    if hw.driver_version:
+        typer.echo(f"NV driver  : {hw.driver_version}")
+    typer.echo("")
+    typer.echo("Health:")
+    color_map = {
+        Severity.OK: typer.colors.GREEN,
+        Severity.WARN: typer.colors.YELLOW,
+        Severity.ERROR: typer.colors.RED,
+    }
+    symbol_map = {Severity.OK: "OK ", Severity.WARN: "!  ", Severity.ERROR: "X  "}
+    n_err = 0
+    for item in run_health_checks(hw):
+        marker = typer.style(symbol_map[item.severity], fg=color_map[item.severity], bold=True)
+        typer.echo(f"  {marker} {item.name:<22} {item.message}")
+        if item.severity == Severity.ERROR:
+            n_err += 1
+    if n_err:
+        raise typer.Exit(code=1)
 
 
 # ---------- gui ----------
@@ -345,6 +380,20 @@ def config_set(
     """Set a config key (e.g. 'model' = 'medium')."""
     cfg.set_config_key(key, value)
     typer.secho(f"Set {key} = {value!r}", fg=typer.colors.GREEN)
+
+
+@config_app.command("unset")
+def config_unset(
+    key: str = typer.Argument(..., help="Config key to remove (e.g. 'backend_mode' to re-trigger the wizard)."),
+) -> None:
+    """Remove a config key. Useful to reset 'backend_mode' and see the wizard again."""
+    c = cfg.load_config()
+    if c.get(key) is None:
+        typer.secho(f"{key} is not set.", fg=typer.colors.YELLOW)
+        return
+    c[key] = None
+    cfg.save_config(c)
+    typer.secho(f"Unset {key}.", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":
