@@ -55,6 +55,18 @@ def _audio_duration(path: Path) -> float:
         return 0.0
 
 
+def _audio_metadata(path: Path) -> tuple[int | None, str | None]:
+    """Read (sample_rate, format) from an audio file. Returns (None, None) on failure."""
+    try:
+        info = sf.info(str(path))
+        sr = int(info.samplerate) if info.samplerate else None
+        # libsndfile returns format names like "FLAC", "WAV"; normalize to lower.
+        fmt = info.format.lower() if info.format else path.suffix.lstrip(".").lower()
+        return sr, fmt
+    except Exception:
+        return None, path.suffix.lstrip(".").lower() or None
+
+
 @dataclass
 class Orphan:
     rec_id: str
@@ -104,6 +116,18 @@ def finalize_orphan(
     enqueue: bool = True,
 ) -> int | None:
     """Write meta.json + (optionally) enqueue a job. Returns the job id or None."""
+    # Read sample_rate + format from one of the recovered tracks so the meta
+    # mirrors what `record` would have written on a clean stop.
+    sr_meta: int | None = None
+    fmt_meta: str | None = None
+    for t in orphan.tracks_found:
+        p = find_track_file(orphan.rec_dir, t)
+        if p is None:
+            continue
+        sr_meta, fmt_meta = _audio_metadata(p)
+        if sr_meta or fmt_meta:
+            break
+
     meta = {
         "id": orphan.rec_id,
         "created_at": dt.datetime.fromtimestamp(
@@ -111,6 +135,8 @@ def finalize_orphan(
         ).isoformat(timespec="seconds"),
         "duration_seconds": round(orphan.duration_seconds, 1),
         "tracks": orphan.tracks_found,
+        "sample_rate": sr_meta,
+        "format": fmt_meta,
         "transcribed": False,
         # Visible marker so the user knows this didn't come from a clean Stop.
         "recovered": True,
