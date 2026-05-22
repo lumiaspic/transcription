@@ -43,6 +43,21 @@ function Step ($msg) { Write-Host ""; Write-Host "==> $msg" -ForegroundColor Cya
 function Done ($msg) { Write-Host "    $msg" -ForegroundColor Green }
 function Note ($msg) { Write-Host "    $msg" -ForegroundColor Yellow }
 
+# PowerShell does NOT propagate native exe failures via $ErrorActionPreference --
+# only its own cmdlets throw. Without this helper, a failing `uv sync` would
+# silently let the script continue past it, creating shortcuts pointing at a
+# broken install. Always wrap native commands with this.
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Cmd,
+        [Parameter(Mandatory = $true)][string]$Context
+    )
+    & $Cmd
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Context failed (exit code $LASTEXITCODE)"
+    }
+}
+
 Step "Transcription installer"
 Write-Host "    Target  : $InstallDir"
 Write-Host "    Branch  : $Branch"
@@ -74,15 +89,32 @@ if (-not $uv) {
 }
 Done "uv $(((uv --version) -split ' ') | Select-Object -Index 1)"
 
+# Free disk space on the install drive. PyTorch + CUDA download is ~3 GB and
+# briefly needs ~6 GB during extraction (the work PC hit "Espace insuffisant"
+# at the extract step). Warn early instead of letting the user wait 5 min for
+# a disk-full error.
+try {
+    $installDrive = (Split-Path -Qualifier $InstallDir).TrimEnd(':')
+    $freeGb = (Get-PSDrive -Name $installDrive -ErrorAction Stop).Free / 1GB
+    $freeStr = $freeGb.ToString('N1')
+    if ($freeGb -lt 6) {
+        Note "Free disk : $freeStr GB on ${installDrive}: drive  (WARNING: need ~6 GB for PyTorch+CUDA wheels)"
+    } else {
+        Done "Free disk : $freeStr GB on ${installDrive}: drive"
+    }
+} catch {
+    Note "Could not read free disk space on $InstallDir : $_"
+}
+
 # ---------- clone or update ----------
 
 Step "Cloning or updating $RepoUrl"
 
 if (Test-Path "$InstallDir\.git") {
     Done "Existing checkout at $InstallDir, fetching $Branch..."
-    git -C $InstallDir fetch --quiet origin $Branch
-    git -C $InstallDir checkout --quiet $Branch
-    git -C $InstallDir reset --hard --quiet "origin/$Branch"
+    Invoke-Native { git -C $InstallDir fetch --quiet origin $Branch } "git fetch"
+    Invoke-Native { git -C $InstallDir checkout --quiet $Branch } "git checkout $Branch"
+    Invoke-Native { git -C $InstallDir reset --hard --quiet "origin/$Branch" } "git reset --hard"
     Done "Now at $(git -C $InstallDir rev-parse --short HEAD)"
 } else {
     if ((Test-Path $InstallDir) -and (@(Get-ChildItem $InstallDir -Force).Count -gt 0)) {
@@ -91,7 +123,7 @@ if (Test-Path "$InstallDir\.git") {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $InstallDir) | Out-Null
     Note "First time on this machine. If the repo is private, a browser will open"
     Note "for GitHub authentication (Git Credential Manager)."
-    git clone --branch $Branch $RepoUrl $InstallDir
+    Invoke-Native { git clone --branch $Branch $RepoUrl $InstallDir } "git clone"
     Done "Cloned at $(git -C $InstallDir rev-parse --short HEAD)"
 }
 
@@ -100,7 +132,23 @@ if (Test-Path "$InstallDir\.git") {
 Step "Installing Python environment (5-10 min the first time, ~3 GB of CUDA wheels)"
 Push-Location $InstallDir
 try {
-    uv sync --extra transcribe
+    try {
+        Invoke-Native { uv sync --extra transcribe } "uv sync --extra transcribe"
+    } catch {
+        Write-Host ""
+        Write-Host "uv sync failed. Common causes:" -ForegroundColor Red
+        Write-Host "  - Disk full -- PyTorch+CUDA needs ~6 GB free during install" -ForegroundColor Red
+        Write-Host "    (cache lives under %LOCALAPPDATA%\uv\cache by default)" -ForegroundColor Red
+        Write-Host "  - Network interrupted -- re-run install.ps1, uv resumes partial downloads" -ForegroundColor Red
+        Write-Host "  - Antivirus blocking writes to the uv cache or venv" -ForegroundColor Red
+        try {
+            $d = (Split-Path -Qualifier $InstallDir).TrimEnd(':')
+            $g = ((Get-PSDrive -Name $d -ErrorAction Stop).Free / 1GB).ToString('N1')
+            Write-Host ""
+            Write-Host "Currently free on ${d}: drive : $g GB" -ForegroundColor Yellow
+        } catch {}
+        throw
+    }
 } finally {
     Pop-Location
 }
