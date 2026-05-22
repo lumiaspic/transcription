@@ -337,6 +337,9 @@ def run_gui(*, port: int = 8765, native: bool = True) -> None:
     DOM / use devtools.
     """
     STATE.start_worker()
+    # Auto-finalize crashed recordings before the worker starts processing,
+    # so they show up in the jobs queue alongside any clean Stop from this session.
+    STATE.recover_orphans()
 
     # NiceGUI 2.x needs the root UI inside a @ui.page handler so it can
     # rebuild it on each browser/webview connection. Defining the route

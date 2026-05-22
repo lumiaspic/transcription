@@ -49,6 +49,24 @@ class AppState:
         self.worker_thread.start()
         log.info("Worker thread started")
 
+    def recover_orphans(self) -> int:
+        """Auto-recover orphan recordings (PC shutdown / crash before clean Stop).
+
+        Called once at GUI startup. Finalizes meta.json for any dir with audio
+        files but no meta, enqueues a job for each. Returns the count.
+        """
+        # Late import: keeps state.py importable without the transcribe stack
+        # and avoids cycles via cli.py.
+        from ..pipeline.recovery import recover_all
+        results = recover_all(queue=self.queue, enqueue=True)
+        if results:
+            log.warning(
+                "Auto-recovered %d orphan recording(s): %s",
+                len(results),
+                ", ".join(o.rec_id for o, _ in results),
+            )
+        return len(results)
+
     def worker_alive(self) -> bool:
         return self.worker_thread is not None and self.worker_thread.is_alive()
 
