@@ -38,3 +38,8 @@ def logs_dir() -> Path:
     p = config_dir() / "logs"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def jobs_db() -> Path:
+    """Persistent SQLite queue file."""
+    return config_dir() / "jobs.db"
