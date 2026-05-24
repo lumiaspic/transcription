@@ -1,4 +1,5 @@
 """Audio device discovery for Windows WASAPI."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

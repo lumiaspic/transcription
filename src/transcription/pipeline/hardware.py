@@ -3,6 +3,7 @@
 Used by the health check (CLI `doctor` command) and the GUI first-run
 wizard to recommend a backend mode without the user guessing.
 """
+
 from __future__ import annotations
 
 import multiprocessing
@@ -25,7 +26,7 @@ class HardwareProbe:
     driver_version: str | None  # NVIDIA driver, if available
 
     @classmethod
-    def detect(cls) -> "HardwareProbe":
+    def detect(cls) -> HardwareProbe:
         has_torch = False
         torch_version = None
         has_cuda = False
@@ -36,6 +37,7 @@ class HardwareProbe:
 
         try:
             import torch
+
             has_torch = True
             torch_version = torch.__version__
             has_cuda = torch.cuda.is_available()
@@ -49,9 +51,12 @@ class HardwareProbe:
         # NVIDIA driver version via nvidia-smi if available (informational only)
         try:
             import subprocess
+
             out = subprocess.run(
                 ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-                capture_output=True, text=True, timeout=3,
+                capture_output=True,
+                text=True,
+                timeout=3,
             )
             if out.returncode == 0:
                 driver_version = out.stdout.strip().splitlines()[0] or None

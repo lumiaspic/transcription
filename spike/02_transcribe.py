@@ -19,6 +19,7 @@ NOTE: this spike SKIPS diarization (which requires a HuggingFace token +
 accepting pyannote/speaker-diarization-3.1 + pyannote/segmentation-3.0 EULAs).
 Diarization is validated in spike 03 once transcription is confirmed working.
 """
+
 from __future__ import annotations
 
 import argparse

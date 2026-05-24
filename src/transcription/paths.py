@@ -1,9 +1,9 @@
 """Standard file system paths for the app."""
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
-
 
 APP_NAME = "transcription"
 

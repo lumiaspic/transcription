@@ -4,17 +4,17 @@
 - Secrets (HF token, API keys) live in the OS keyring (Windows Credential Manager).
   We NEVER write tokens to disk in plain text.
 """
+
 from __future__ import annotations
 
 import sys
-import tomllib
 from typing import Any
 
 import keyring
 import tomli_w
+import tomllib
 
 from .paths import config_file
-
 
 KEYRING_SERVICE = "transcription-app"
 
@@ -72,6 +72,7 @@ def set_config_key(key: str, value: Any) -> None:
 
 
 # ---------- Token secrets (keyring) ----------
+
 
 def set_token(service: str, token: str) -> None:
     """Store a token in the OS keyring under our service namespace."""

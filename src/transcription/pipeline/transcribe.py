@@ -3,23 +3,24 @@
 Called by both the synchronous `transcribe` CLI command AND the background
 worker, so there is exactly one place where the per-track logic lives.
 """
+
 from __future__ import annotations
 
 import datetime as dt
 import json
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
-from ..backends.base import DiarizationUnavailable, TranscriptResult, TranscriptionBackend
+from ..backends.base import DiarizationUnavailable, TranscriptionBackend, TranscriptResult
 from ..export.format import write_all
 from ..export.merge import merge_to_markdown
 from .speakers import SpeakerProfile, profile_for_track
 
 log = logging.getLogger(__name__)
 
-ProgressCb = Optional[Callable[[str], None]]
+ProgressCb = Callable[[str], None] | None
 
 KNOWN_TRACKS = ("mic", "system")
 # Audio extensions we look for, in priority order. New recordings are FLAC;
@@ -76,9 +77,7 @@ def run_transcription(
             track_files.append((t, p))
     if not track_files:
         exts = "|".join(TRACK_EXTS)
-        raise FileNotFoundError(
-            f"No {{{'|'.join(KNOWN_TRACKS)}}}.{{{exts}}} in {rec_dir}"
-        )
+        raise FileNotFoundError(f"No {{{'|'.join(KNOWN_TRACKS)}}}.{{{exts}}} in {rec_dir}")
 
     results: list[TranscriptResult] = []
     for track, audio_path in track_files:
@@ -95,14 +94,18 @@ def run_transcription(
             log.warning("Diarization unavailable on %s, falling back to SOLO: %s", track, e)
             if progress:
                 progress(f"  diarization unavailable, retrying as SOLO: {e}")
-            result = backend.transcribe(wav, profile=SpeakerProfile.SOLO, language=language)
+            result = backend.transcribe(audio_path, profile=SpeakerProfile.SOLO, language=language)
 
         result.track = track
         elapsed = time.time() - t0
         rtf = result.duration / elapsed if elapsed > 0 else 0.0
         log.info(
             "Track %s: %d segments, %.1fs audio, %.1fs wall (%.1fx RT)",
-            track, len(result.segments), result.duration, elapsed, rtf,
+            track,
+            len(result.segments),
+            result.duration,
+            elapsed,
+            rtf,
         )
         if progress:
             progress(f"  {track}: {len(result.segments)} segments, {rtf:.1f}x realtime")
