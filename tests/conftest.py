@@ -6,10 +6,22 @@ without needing an explicit import (pytest convention).
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
-from transcription.backends.base import Segment, TranscriptResult
+from transcription.backends.base import (
+    DiarizationUnavailable,
+    Segment,
+    TranscriptionBackend,
+    TranscriptResult,
+)
 from transcription.pipeline.speakers import SpeakerProfile
+
+# ---------------------------------------------------------------------------
+# TranscriptResult / Segment helpers
+# ---------------------------------------------------------------------------
 
 
 def _make_segment(start: float, end: float, text: str, speaker: str | None = None) -> Segment:
@@ -49,3 +61,107 @@ def system_result() -> TranscriptResult:
         profile=SpeakerProfile.MULTI,
         track="system",
     )
+
+
+# ---------------------------------------------------------------------------
+# FakeBackend — stand-in for the real WhisperX backend in tests.
+# Returns a canned TranscriptResult and lets tests assert how it was called.
+# Optionally raises DiarizationUnavailable on the first MULTI call to
+# exercise the SOLO fallback path in `run_transcription`.
+# ---------------------------------------------------------------------------
+
+
+class FakeBackend(TranscriptionBackend):
+    name = "fake"
+
+    def __init__(
+        self,
+        *,
+        fail_diarization_once: bool = False,
+        duration: float = 1.0,
+    ) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._fail_once = fail_diarization_once
+        self._duration = duration
+
+    def transcribe(
+        self,
+        audio_path: Path,
+        profile: SpeakerProfile,
+        language: str | None = None,
+    ) -> TranscriptResult:
+        self.calls.append({"audio_path": audio_path, "profile": profile, "language": language})
+
+        if self._fail_once and profile == SpeakerProfile.MULTI:
+            self._fail_once = False  # only fail the first time
+            raise DiarizationUnavailable("no HF token (simulated)")
+
+        return TranscriptResult(
+            language=language or "en",
+            segments=[
+                Segment(start=0.0, end=self._duration, text=f"hello from {audio_path.stem}"),
+            ],
+            duration=self._duration,
+            backend=self.name,
+            model="fake-model",
+            profile=profile,
+        )
+
+
+@pytest.fixture
+def fake_backend() -> FakeBackend:
+    return FakeBackend()
+
+
+# ---------------------------------------------------------------------------
+# Environment isolation — point the app's config dir at a per-test tmp dir.
+#
+# `paths.config_dir()` reads $APPDATA (Windows) or falls back to ~/.config.
+# We override BOTH so the test never touches the user's real config, no
+# matter which platform CI runs on.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def isolated_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Redirect `config_dir()` to a fresh tmp dir for this test."""
+    fake_appdata = tmp_path / "appdata"
+    monkeypatch.setenv("APPDATA", str(fake_appdata))
+    # Also override HOME so the Linux/macOS fallback path lands somewhere safe.
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+    return fake_appdata / "transcription"  # what config_dir() will return
+
+
+# ---------------------------------------------------------------------------
+# In-memory keyring — replaces the OS keyring (Credential Manager / Keychain)
+# for tests touching tokens. Avoids both pollution of the user's keyring AND
+# the CI box having no keyring backend at all.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def fake_keyring(monkeypatch: pytest.MonkeyPatch) -> dict[tuple[str, str], str]:
+    """Replaces `keyring.{set,get,delete}_password` with a dict-backed stub.
+
+    Yields the underlying dict so tests can inspect or seed it directly.
+    """
+    import keyring
+    import keyring.errors
+
+    store: dict[tuple[str, str], str] = {}
+
+    def _set(service: str, username: str, password: str) -> None:
+        store[(service, username)] = password
+
+    def _get(service: str, username: str) -> str | None:
+        return store.get((service, username))
+
+    def _delete(service: str, username: str) -> None:
+        if (service, username) not in store:
+            raise keyring.errors.PasswordDeleteError("not found")
+        del store[(service, username)]
+
+    monkeypatch.setattr(keyring, "set_password", _set)
+    monkeypatch.setattr(keyring, "get_password", _get)
+    monkeypatch.setattr(keyring, "delete_password", _delete)
+    return store
