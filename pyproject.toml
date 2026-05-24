@@ -42,6 +42,7 @@ packages = ["src/transcription"]
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",
     "ruff>=0.6",
 ]
 
@@ -59,7 +60,29 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+# --cov enables coverage on the `transcription` package; xml is for Codecov,
+# term-missing for local feedback. --cov-report= (empty) en CLI désactive si besoin.
+addopts = "-ra --cov=transcription --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+source = ["src/transcription"]
+branch = true
+# Modules très liés au matériel/UI : exclus tant qu'on n'a pas de mocks dédiés,
+# sinon le % de couverture est dominé par du code intestable en CI.
+omit = [
+    "src/transcription/ui/*",
+    "src/transcription/audio/*",
+    "src/transcription/backends/whisperx_local.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false
 
 # PyTorch CUDA wheels are not on PyPI - they live on download.pytorch.org.
 # We tell uv to fetch torch and torchaudio from the CUDA 12.4 index.
