@@ -3,6 +3,7 @@
 > Local Windows desktop app that replaces the OBS → FFmpeg → Colab → WhisperX workflow with one click.
 > Capture mic + system audio as two separate tracks, auto-transcribe with WhisperX + pyannote diarization, get a merged Markdown transcript on disk.
 
+[![CI](https://github.com/lumiaspic/transcription/actions/workflows/ci.yml/badge.svg)](https://github.com/lumiaspic/transcription/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows 11](https://img.shields.io/badge/platform-Windows%2011-0078D6)](https://www.microsoft.com/windows)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue.svg)](https://www.python.org/)
@@ -25,7 +26,7 @@ Personal prototype, used daily on Windows 11 with an NVIDIA GPU. Works also on C
 
 The full procedure is in [`packaging/README.md`](packaging/README.md). TL;DR:
 
-1. Download [`packaging/install.ps1`](packaging/install.ps1) (private repo → use GitHub's **Raw** button).
+1. Download [`packaging/install.ps1`](packaging/install.ps1) — click the **Raw** button on GitHub, then save as.
 2. Open PowerShell where you saved it:
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass
