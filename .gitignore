@@ -11,6 +11,9 @@ __pycache__/
 coverage.xml
 htmlcov/
 
+# Test reports (JUnit, for Codecov Test Analytics)
+junit.xml
+
 # Envs
 .venv/
 .env
