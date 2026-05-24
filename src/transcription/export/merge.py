@@ -1,4 +1,5 @@
 """Merge multiple TranscriptResults (mic + system) into a single chronological transcript."""
+
 from __future__ import annotations
 
 from pathlib import Path

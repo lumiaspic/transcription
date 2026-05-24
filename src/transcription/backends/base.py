@@ -5,6 +5,7 @@ Implementations live in sibling modules:
     - remote_api.py     : future, HTTP client for Replicate / RunPod / self-hosted
     - faster_whisper_cpu.py : future, lighter CPU-only path
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

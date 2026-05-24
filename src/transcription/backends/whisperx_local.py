@@ -1,4 +1,5 @@
 """Local WhisperX backend (GPU or CPU)."""
+
 from __future__ import annotations
 
 import logging
@@ -21,6 +22,7 @@ class WhisperXLocalBackend(TranscriptionBackend):
 
     def _device(self) -> tuple[str, str]:
         import torch
+
         if torch.cuda.is_available():
             cfg = load_config()
             return "cuda", cfg["compute_type_cuda"]
@@ -30,6 +32,7 @@ class WhisperXLocalBackend(TranscriptionBackend):
     def _load_asr(self):
         if self._asr_model is None:
             import whisperx
+
             device, compute_type = self._device()
             log.info("Loading WhisperX model %s on %s (%s)", self.model_name, device, compute_type)
             self._asr_model = whisperx.load_model(
@@ -44,6 +47,7 @@ class WhisperXLocalBackend(TranscriptionBackend):
         language: str | None = None,
     ) -> TranscriptResult:
         import whisperx
+
         device, _ = self._device()
         model = self._load_asr()
 
@@ -59,7 +63,11 @@ class WhisperXLocalBackend(TranscriptionBackend):
         try:
             align_model, align_meta = whisperx.load_align_model(language_code=lang, device=device)
             result = whisperx.align(
-                result["segments"], align_model, align_meta, audio, device,
+                result["segments"],
+                align_model,
+                align_meta,
+                audio,
+                device,
                 return_char_alignments=False,
             )
         except Exception as e:
@@ -88,15 +96,21 @@ class WhisperXLocalBackend(TranscriptionBackend):
     def _extract_segments(result: dict) -> list[Segment]:
         out: list[Segment] = []
         for seg in result.get("segments", []):
-            out.append(Segment(
-                start=float(seg.get("start", 0.0)),
-                end=float(seg.get("end", 0.0)),
-                text=str(seg.get("text", "")).strip(),
-            ))
+            out.append(
+                Segment(
+                    start=float(seg.get("start", 0.0)),
+                    end=float(seg.get("end", 0.0)),
+                    text=str(seg.get("text", "")).strip(),
+                )
+            )
         return out
 
     def _apply_diarization(
-        self, audio, transcribe_result: dict, segments: list[Segment], device: str,
+        self,
+        audio,
+        transcribe_result: dict,
+        segments: list[Segment],
+        device: str,
     ) -> list[Segment]:
         token = get_token("huggingface")
         if not token:
@@ -105,11 +119,13 @@ class WhisperXLocalBackend(TranscriptionBackend):
             )
         try:
             import whisperx
+
             log.info("Running pyannote diarization...")
             # WhisperX 3.8.x: param is `token=`, default model is
             # pyannote/speaker-diarization-community-1.
             diarize_pipeline = whisperx.diarize.DiarizationPipeline(
-                token=token, device=device,
+                token=token,
+                device=device,
             )
             diarize_segments = diarize_pipeline(audio)
             assigned = whisperx.assign_word_speakers(diarize_segments, transcribe_result)
@@ -119,10 +135,12 @@ class WhisperXLocalBackend(TranscriptionBackend):
         # Re-extract segments; assign_word_speakers adds a 'speaker' key.
         out: list[Segment] = []
         for seg in assigned.get("segments", []):
-            out.append(Segment(
-                start=float(seg.get("start", 0.0)),
-                end=float(seg.get("end", 0.0)),
-                text=str(seg.get("text", "")).strip(),
-                speaker=seg.get("speaker"),
-            ))
+            out.append(
+                Segment(
+                    start=float(seg.get("start", 0.0)),
+                    end=float(seg.get("end", 0.0)),
+                    text=str(seg.get("text", "")).strip(),
+                    speaker=seg.get("speaker"),
+                )
+            )
         return out

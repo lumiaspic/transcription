@@ -8,6 +8,7 @@ Model cache: loading a Whisper model takes ~13s. The worker keeps one
 backend instance per model name in memory so jobs that share a model
 reuse the loaded weights -- a 100x speedup for the model-load phase.
 """
+
 from __future__ import annotations
 
 import logging
@@ -58,7 +59,10 @@ class Worker:
     def _execute(self, job: Job) -> None:
         log.info(
             "Job %d running: rec=%s model=%s diarize=%s",
-            job.id, job.recording_id, job.model or "config-default", job.diarize,
+            job.id,
+            job.recording_id,
+            job.model or "config-default",
+            job.diarize,
         )
         try:
             backend = self._get_backend(job.model)
