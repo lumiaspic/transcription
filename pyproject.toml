@@ -6,7 +6,7 @@ requires-python = ">=3.10,<3.13"
 dependencies = [
     "soundcard>=0.4.3",
     "soundfile>=0.12.1",
-    "numpy>=1.24",
+    "numpy>=2.2.6",
     "typer>=0.12",
     "keyring>=24",
     "tomli-w>=1.0",
