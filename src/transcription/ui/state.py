@@ -5,6 +5,7 @@ Stop button (which fires in a separate handler) can reach the active
 recorder started by the Start button. The Worker also lives here so the
 UI can show its liveness and clean up cleanly on shutdown.
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,7 +13,6 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from ..audio.recorder import DualRecorder
 from ..pipeline.jobs import JobQueue
@@ -27,15 +27,15 @@ class RecordingState:
     started_at: float = 0.0
     rec_id: str = ""
     rec_dir: Path = field(default_factory=Path)
-    recorder: Optional[DualRecorder] = None
+    recorder: DualRecorder | None = None
 
 
 class AppState:
     def __init__(self) -> None:
         self.recording = RecordingState()
         self.queue = JobQueue()
-        self.worker: Optional[Worker] = None
-        self.worker_thread: Optional[threading.Thread] = None
+        self.worker: Worker | None = None
+        self.worker_thread: threading.Thread | None = None
 
     # ---------- worker ----------
 
@@ -44,7 +44,9 @@ class AppState:
             return
         self.worker = Worker()
         self.worker_thread = threading.Thread(
-            target=self.worker.run_forever, daemon=True, name="transcription-worker",
+            target=self.worker.run_forever,
+            daemon=True,
+            name="transcription-worker",
         )
         self.worker_thread.start()
         log.info("Worker thread started")
@@ -58,6 +60,7 @@ class AppState:
         # Late import: keeps state.py importable without the transcribe stack
         # and avoids cycles via cli.py.
         from ..pipeline.recovery import recover_all
+
         results = recover_all(queue=self.queue, enqueue=True)
         if results:
             log.warning(
@@ -75,6 +78,7 @@ class AppState:
     def begin_recording(self, rec_id: str, rec_dir: Path) -> None:
         # Late import to avoid the import cycle config -> paths -> config.
         from .. import config as cfg
+
         c = cfg.load_config()
         recorder = DualRecorder(
             rec_dir,

@@ -1,4 +1,5 @@
 """Export a TranscriptResult to .txt, .srt, .json."""
+
 from __future__ import annotations
 
 import json
@@ -18,6 +19,7 @@ def to_txt(result: TranscriptResult, path: Path) -> None:
 
 def to_srt(result: TranscriptResult, path: Path) -> None:
     """Standard SRT subtitle format."""
+
     def fmt(t: float) -> str:
         ms = int(round(t * 1000))
         h, ms = divmod(ms, 3_600_000)
@@ -28,9 +30,7 @@ def to_srt(result: TranscriptResult, path: Path) -> None:
     chunks = []
     for i, seg in enumerate(result.segments, start=1):
         speaker = f"[{seg.speaker}] " if seg.speaker else ""
-        chunks.append(
-            f"{i}\n{fmt(seg.start)} --> {fmt(seg.end)}\n{speaker}{seg.text}\n"
-        )
+        chunks.append(f"{i}\n{fmt(seg.start)} --> {fmt(seg.end)}\n{speaker}{seg.text}\n")
     path.write_text("\n".join(chunks), encoding="utf-8")
 
 

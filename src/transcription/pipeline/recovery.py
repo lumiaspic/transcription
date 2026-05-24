@@ -20,6 +20,7 @@ A recording with `meta.json` (even with transcribed=False) is NOT an
 orphan -- the user explicitly chose to keep it un-transcribed (e.g.
 `record --no-transcribe`). We don't second-guess that.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -100,12 +101,14 @@ def find_orphans(root: Path | None = None) -> list[Orphan]:
                 dur = _audio_duration(p)
                 if dur > max_dur:
                     max_dur = dur
-        out.append(Orphan(
-            rec_id=d.name,
-            rec_dir=d,
-            tracks_found=tracks_present,
-            duration_seconds=max_dur,
-        ))
+        out.append(
+            Orphan(
+                rec_id=d.name,
+                rec_dir=d,
+                tracks_found=tracks_present,
+                duration_seconds=max_dur,
+            )
+        )
     return out
 
 
@@ -130,9 +133,9 @@ def finalize_orphan(
 
     meta = {
         "id": orphan.rec_id,
-        "created_at": dt.datetime.fromtimestamp(
-            orphan.rec_dir.stat().st_mtime
-        ).isoformat(timespec="seconds"),
+        "created_at": dt.datetime.fromtimestamp(orphan.rec_dir.stat().st_mtime).isoformat(
+            timespec="seconds"
+        ),
         "duration_seconds": round(orphan.duration_seconds, 1),
         "tracks": orphan.tracks_found,
         "sample_rate": sr_meta,
@@ -142,11 +145,14 @@ def finalize_orphan(
         "recovered": True,
     }
     (orphan.rec_dir / "meta.json").write_text(
-        json.dumps(meta, indent=2), encoding="utf-8",
+        json.dumps(meta, indent=2),
+        encoding="utf-8",
     )
     log.info(
         "Recovered orphan %s (duration=%.1fs, tracks=%s)",
-        orphan.rec_id, orphan.duration_seconds, orphan.tracks_found,
+        orphan.rec_id,
+        orphan.duration_seconds,
+        orphan.tracks_found,
     )
     if not enqueue:
         return None

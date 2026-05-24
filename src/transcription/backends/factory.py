@@ -8,12 +8,12 @@ for both local_gpu and local_cpu — the hardware detection inside
 WhisperXLocalBackend._device() already adapts. The two modes are distinct
 only for UX (the wizard message + later RemoteAPI swap-in).
 """
+
 from __future__ import annotations
 
 from ..config import load_config
 from .base import TranscriptionBackend
 from .whisperx_local import WhisperXLocalBackend
-
 
 KNOWN_MODES = ("local_gpu", "local_cpu", "remote_api")
 

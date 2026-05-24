@@ -14,6 +14,7 @@ Commands:
     transcription config remove-token <service>
     transcription config set <key> <value>
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -34,11 +35,12 @@ from .pipeline.jobs import JobQueue
 from .pipeline.transcribe import run_transcription
 from .pipeline.worker import Worker
 
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("transcription")
 
-app = typer.Typer(help="Local audio capture + WhisperX transcription pipeline.", no_args_is_help=True)
+app = typer.Typer(
+    help="Local audio capture + WhisperX transcription pipeline.", no_args_is_help=True
+)
 config_app = typer.Typer(help="Configure tokens and settings.", no_args_is_help=True)
 jobs_app = typer.Typer(help="Manage queued transcription jobs.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
@@ -46,6 +48,7 @@ app.add_typer(jobs_app, name="jobs")
 
 
 # ---------- helpers ----------
+
 
 def _new_recording_id() -> str:
     return dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -68,6 +71,7 @@ def _read_meta(rec_dir: Path) -> dict:
 
 # ---------- record ----------
 
+
 @app.command()
 def record(
     duration: float = typer.Option(None, help="Seconds. Omit to record until Ctrl+C."),
@@ -75,19 +79,25 @@ def record(
     mic: str = typer.Option(None, help="Override mic device name."),
     speaker: str = typer.Option(None, help="Override speaker (loopback source) name."),
     no_transcribe: bool = typer.Option(
-        False, "--no-transcribe", help="Don't enqueue a transcription job at the end.",
+        False,
+        "--no-transcribe",
+        help="Don't enqueue a transcription job at the end.",
     ),
     model: str = typer.Option(None, help="Whisper model for the queued job (overrides config)."),
     language: str = typer.Option(None, help="Force language code (e.g. 'fr') for the queued job."),
     no_diarize: bool = typer.Option(
-        False, "--no-diarize", help="Skip diarization on the system track for the queued job.",
+        False,
+        "--no-diarize",
+        help="Skip diarization on the system track for the queued job.",
     ),
     sample_rate: int = typer.Option(
-        None, "--sample-rate",
+        None,
+        "--sample-rate",
         help="Recording sample rate in Hz (overrides config). Default 16000 (matches Whisper/pyannote internal rate).",
     ),
     format: str = typer.Option(
-        None, "--format",
+        None,
+        "--format",
         help="Recording format: 'flac' or 'wav' (overrides config). Default 'flac'.",
     ),
 ) -> None:
@@ -105,8 +115,7 @@ def record(
     typer.echo(f"  system : {speaker or '(default)'}")
     typer.echo(f"  audio  : {sr} Hz {fmt}")
 
-    recorder = DualRecorder(rec_dir, mic_name=mic, speaker_name=speaker,
-                            sample_rate=sr, format=fmt)
+    recorder = DualRecorder(rec_dir, mic_name=mic, speaker_name=speaker, sample_rate=sr, format=fmt)
     recorder.start()
     started = time.time()
     try:
@@ -123,15 +132,18 @@ def record(
         recorder.stop()
         elapsed = time.time() - started
 
-    _write_meta(rec_dir, {
-        "id": rec_id,
-        "created_at": dt.datetime.now().isoformat(timespec="seconds"),
-        "duration_seconds": round(elapsed, 1),
-        "tracks": ["mic", "system"],
-        "sample_rate": sr,
-        "format": fmt,
-        "transcribed": False,
-    })
+    _write_meta(
+        rec_dir,
+        {
+            "id": rec_id,
+            "created_at": dt.datetime.now().isoformat(timespec="seconds"),
+            "duration_seconds": round(elapsed, 1),
+            "tracks": ["mic", "system"],
+            "sample_rate": sr,
+            "format": fmt,
+            "transcribed": False,
+        },
+    )
     typer.secho(f"Done. {elapsed:.1f}s captured. ID: {rec_id}", fg=typer.colors.GREEN)
 
     if no_transcribe:
@@ -147,19 +159,21 @@ def record(
         diarize=not no_diarize,
     )
     typer.secho(
-        f"Enqueued as job #{job_id}. "
-        f"Start a daemon to process it: `transcription daemon`",
+        f"Enqueued as job #{job_id}. Start a daemon to process it: `transcription daemon`",
         fg=typer.colors.CYAN,
     )
 
 
 # ---------- transcribe (synchronous) ----------
 
+
 @app.command()
 def transcribe(
     rec_id: str = typer.Argument(..., help="Recording ID (folder name under recordings/)."),
     model: str = typer.Option(None, help="Whisper model (tiny|base|small|medium|large-v3)."),
-    no_diarize: bool = typer.Option(False, "--no-diarize", help="Disable diarization on the system track."),
+    no_diarize: bool = typer.Option(
+        False, "--no-diarize", help="Disable diarization on the system track."
+    ),
     language: str = typer.Option(None, help="ISO code (e.g. 'fr'). Auto-detect if omitted."),
 ) -> None:
     """Run WhisperX on a recording's mic and system audio (synchronous; blocks until done).
@@ -182,13 +196,14 @@ def transcribe(
         )
     except FileNotFoundError as e:
         typer.secho(str(e), fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
     typer.echo(f"\nMerged transcript -> {rec_dir / 'transcript.md'}")
     typer.secho(f"Done. {len(results)} track(s) transcribed.", fg=typer.colors.GREEN)
 
 
 # ---------- list (recordings) ----------
+
 
 @app.command("list")
 def list_recordings() -> None:
@@ -209,6 +224,7 @@ def list_recordings() -> None:
 
 # ---------- devices ----------
 
+
 @app.command()
 def devices() -> None:
     """List available audio input/output devices."""
@@ -219,10 +235,12 @@ def devices() -> None:
 
 # ---------- recover ----------
 
+
 @app.command()
 def recover(
     no_enqueue: bool = typer.Option(
-        False, "--no-enqueue",
+        False,
+        "--no-enqueue",
         help="Only finalize meta.json; don't enqueue transcription jobs.",
     ),
 ) -> None:
@@ -234,6 +252,7 @@ def recover(
     and enqueues a transcription job.
     """
     from .pipeline.recovery import recover_all
+
     results = recover_all(enqueue=not no_enqueue)
     if not results:
         typer.echo("No orphan recordings found.")
@@ -247,6 +266,7 @@ def recover(
 
 
 # ---------- doctor ----------
+
 
 @app.command()
 def doctor() -> None:
@@ -283,11 +303,13 @@ def doctor() -> None:
 
 # ---------- gui ----------
 
+
 @app.command()
 def gui(
     port: int = typer.Option(8765, help="HTTP port for the embedded server."),
     browser: bool = typer.Option(
-        False, "--browser",
+        False,
+        "--browser",
         help="Open in default browser instead of a native window (useful for devtools).",
     ),
 ) -> None:
@@ -298,14 +320,18 @@ def gui(
     same time -- both would race on the same queue.
     """
     from .ui.app import run_gui
+
     run_gui(port=port, native=not browser)
 
 
 # ---------- daemon ----------
 
+
 @app.command()
 def daemon(
-    poll_interval: float = typer.Option(2.0, "--poll-interval", help="Seconds between queue polls."),
+    poll_interval: float = typer.Option(
+        2.0, "--poll-interval", help="Seconds between queue polls."
+    ),
 ) -> None:
     """Run the background worker: drains the job queue forever (Ctrl+C to stop).
 
@@ -318,6 +344,7 @@ def daemon(
 
 # ---------- jobs ----------
 
+
 def _fmt_job_row(j) -> str:
     err = (j.error or "").replace("\n", " ")[:50]
     return (
@@ -329,7 +356,8 @@ def _fmt_job_row(j) -> str:
 @jobs_app.command("list")
 def jobs_list(
     status: str = typer.Option(
-        "all", help="pending | running | done | failed | all",
+        "all",
+        help="pending | running | done | failed | all",
     ),
     limit: int = typer.Option(50, help="Max rows."),
 ) -> None:
@@ -339,9 +367,7 @@ def jobs_list(
     if not items:
         typer.echo(f"No jobs (status={status}).")
         return
-    typer.echo(
-        f"{'ID':>4} {'RECORDING':<22} {'STATUS':<8} {'MODEL':<10} {'CREATED':<20} ERROR"
-    )
+    typer.echo(f"{'ID':>4} {'RECORDING':<22} {'STATUS':<8} {'MODEL':<10} {'CREATED':<20} ERROR")
     for j in items:
         typer.echo(_fmt_job_row(j))
 
@@ -376,6 +402,7 @@ def jobs_retry(job_id: int = typer.Argument(...)) -> None:
 
 # ---------- config ----------
 
+
 @config_app.command("show")
 def config_show() -> None:
     """Show current config + which tokens are set."""
@@ -385,7 +412,11 @@ def config_show() -> None:
         typer.echo(f"  {k} = {v!r}")
     typer.echo("\nTokens (stored in OS keyring):")
     for svc, present in cfg.list_token_status().items():
-        status = typer.style("set", fg=typer.colors.GREEN) if present else typer.style("not set", fg=typer.colors.YELLOW)
+        status = (
+            typer.style("set", fg=typer.colors.GREEN)
+            if present
+            else typer.style("not set", fg=typer.colors.YELLOW)
+        )
         desc = cfg.KNOWN_TOKEN_SERVICES.get(svc, "")
         typer.echo(f"  {svc:<12} {status}   {desc}")
 
@@ -396,8 +427,10 @@ def config_set_token(
 ) -> None:
     """Store a token in the OS keyring (input not echoed)."""
     if service not in cfg.KNOWN_TOKEN_SERVICES:
-        typer.secho(f"Unknown service '{service}'. Known: {list(cfg.KNOWN_TOKEN_SERVICES)}",
-                    fg=typer.colors.YELLOW)
+        typer.secho(
+            f"Unknown service '{service}'. Known: {list(cfg.KNOWN_TOKEN_SERVICES)}",
+            fg=typer.colors.YELLOW,
+        )
     token = getpass(f"Token for {service}: ")
     if not token.strip():
         typer.secho("Empty token, aborted.", fg=typer.colors.RED)
@@ -429,7 +462,9 @@ def config_set(
 
 @config_app.command("unset")
 def config_unset(
-    key: str = typer.Argument(..., help="Config key to remove (e.g. 'backend_mode' to re-trigger the wizard)."),
+    key: str = typer.Argument(
+        ..., help="Config key to remove (e.g. 'backend_mode' to re-trigger the wizard)."
+    ),
 ) -> None:
     """Remove a config key. Useful to reset 'backend_mode' and see the wizard again."""
     c = cfg.load_config()

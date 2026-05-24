@@ -4,14 +4,15 @@ Any process can enqueue jobs safely (WAL journal mode). Only one worker
 should consume at a time; multiple consumers would not corrupt anything
 thanks to the atomic UPDATE...RETURNING claim, but they'd contend pointlessly.
 """
+
 from __future__ import annotations
 
 import datetime as dt
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Optional
 
 from ..paths import jobs_db
 
@@ -42,17 +43,17 @@ class Job:
     recording_id: str
     recording_dir: str
     status: str
-    model: Optional[str]
-    language: Optional[str]
+    model: str | None
+    language: str | None
     diarize: bool
     created_at: str
-    started_at: Optional[str]
-    finished_at: Optional[str]
-    error: Optional[str]
+    started_at: str | None
+    finished_at: str | None
+    error: str | None
     attempts: int
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "Job":
+    def from_row(cls, row: sqlite3.Row) -> Job:
         return cls(
             id=row["id"],
             recording_id=row["recording_id"],
@@ -76,7 +77,7 @@ def _now() -> str:
 class JobQueue:
     """Thin SQLite wrapper. One connection per operation to keep things stateless."""
 
-    def __init__(self, db_path: Optional[Path] = None) -> None:
+    def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or jobs_db()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
@@ -115,7 +116,7 @@ class JobQueue:
 
     # ---------- consumer side ----------
 
-    def claim_next(self) -> Optional[Job]:
+    def claim_next(self) -> Job | None:
         """Atomically pick the oldest pending job and mark it running.
 
         Uses SQLite's UPDATE...RETURNING (>= 3.35) so the claim is a single
@@ -181,11 +182,12 @@ class JobQueue:
                 ).fetchall()
             else:
                 rows = c.execute(
-                    "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,),
+                    "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
                 ).fetchall()
             return [Job.from_row(r) for r in rows]
 
-    def get(self, job_id: int) -> Optional[Job]:
+    def get(self, job_id: int) -> Job | None:
         with self._conn() as c:
             row = c.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
             return Job.from_row(row) if row else None

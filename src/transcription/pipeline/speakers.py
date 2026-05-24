@@ -1,4 +1,5 @@
 """Speaker handling profile per audio track."""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -7,8 +8,8 @@ from enum import Enum
 class SpeakerProfile(str, Enum):
     """How to handle speaker assignment for a given track."""
 
-    SOLO = "solo"     # Single known speaker (e.g. own mic). No diarization, all -> SPEAKER_00.
-    MULTI = "multi"   # Unknown speakers (e.g. system audio with Discord/Teams). Run diarization.
+    SOLO = "solo"  # Single known speaker (e.g. own mic). No diarization, all -> SPEAKER_00.
+    MULTI = "multi"  # Unknown speakers (e.g. system audio with Discord/Teams). Run diarization.
 
 
 # Convention: filenames map to profiles. Used by the CLI to apply the right

@@ -4,6 +4,7 @@ Single window with three cards: record, jobs queue, recordings list.
 Runs the worker in a background thread (same process), drains queue
 continuously while the GUI is open.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -25,6 +26,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------- helpers ----------
+
 
 def _new_recording_id() -> str:
     return dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -59,6 +61,7 @@ def _format_elapsed(seconds: float) -> str:
 
 # ---------- actions ----------
 
+
 def _start_recording() -> None:
     if STATE.recording.active:
         return
@@ -84,22 +87,26 @@ def _stop_recording_and_enqueue() -> None:
     sr = getattr(recorder, "sample_rate", None) if recorder else None
     fmt = getattr(recorder, "format", None) if recorder else None
     (rec_dir / "meta.json").write_text(
-        json.dumps({
-            "id": rec_id,
-            "created_at": dt.datetime.now().isoformat(timespec="seconds"),
-            "duration_seconds": round(elapsed, 1),
-            "tracks": ["mic", "system"],
-            "sample_rate": sr,
-            "format": fmt,
-            "transcribed": False,
-        }, indent=2),
+        json.dumps(
+            {
+                "id": rec_id,
+                "created_at": dt.datetime.now().isoformat(timespec="seconds"),
+                "duration_seconds": round(elapsed, 1),
+                "tracks": ["mic", "system"],
+                "sample_rate": sr,
+                "format": fmt,
+                "transcribed": False,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
 
     job_id = STATE.queue.enqueue(recording_id=rec_id, recording_dir=rec_dir)
     ui.notify(
         f"Stopped after {_format_elapsed(elapsed)}. Enqueued as job #{job_id}.",
-        type="positive", position="bottom",
+        type="positive",
+        position="bottom",
     )
     log.info("UI: stopped %s after %.1fs, enqueued as job %d", rec_id, elapsed, job_id)
 
@@ -122,6 +129,7 @@ def _show_job_error(job_id: int) -> None:
 
 # ---------- layout ----------
 
+
 def _build_ui() -> None:
     # --- header ---
     with ui.header(elevated=True).classes("items-center justify-between"):
@@ -131,24 +139,24 @@ def _build_ui() -> None:
             worker_dot = ui.icon("circle").classes("text-base")
 
             def _update_dot() -> None:
-                worker_dot.props(
-                    f"color={'positive' if STATE.worker_alive() else 'grey'}"
-                )
+                worker_dot.props(f"color={'positive' if STATE.worker_alive() else 'grey'}")
+
             _update_dot()
             ui.timer(2.0, _update_dot)
 
     # --- main column ---
     with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
-
         # --- Recording card ---
         with ui.card().classes("w-full"):
             ui.label("Recording").classes("text-lg font-semibold")
             with ui.row().classes("items-center gap-4"):
                 start_btn = ui.button(
-                    "● Start", on_click=_start_recording,
+                    "● Start",
+                    on_click=_start_recording,
                 ).props("color=positive size=lg")
                 stop_btn = ui.button(
-                    "■ Stop", on_click=_stop_recording_and_enqueue,
+                    "■ Stop",
+                    on_click=_stop_recording_and_enqueue,
                 ).props("color=negative size=lg")
                 elapsed_label = ui.label("—").classes("text-3xl font-mono ml-auto")
 
@@ -163,6 +171,7 @@ def _build_ui() -> None:
                     elapsed_label.classes(add="text-gray-400", remove="text-red-500")
                     start_btn.enable()
                     stop_btn.disable()
+
             _tick()
             ui.timer(0.5, _tick)
 
@@ -170,15 +179,23 @@ def _build_ui() -> None:
         with ui.card().classes("w-full"):
             with ui.row().classes("items-center justify-between w-full"):
                 ui.label("Jobs queue").classes("text-lg font-semibold")
-                ui.label(f"{STATE.queue.db_path}").classes(
-                    "text-xs text-gray-400 font-mono"
-                )
+                ui.label(f"{STATE.queue.db_path}").classes("text-xs text-gray-400 font-mono")
             jobs_table = ui.table(
                 columns=[
                     {"name": "id", "label": "#", "field": "id", "align": "right"},
-                    {"name": "recording_id", "label": "Recording", "field": "recording_id", "align": "left"},
+                    {
+                        "name": "recording_id",
+                        "label": "Recording",
+                        "field": "recording_id",
+                        "align": "left",
+                    },
                     {"name": "status", "label": "Status", "field": "status", "align": "left"},
-                    {"name": "created_at", "label": "Created", "field": "created_at", "align": "left"},
+                    {
+                        "name": "created_at",
+                        "label": "Created",
+                        "field": "created_at",
+                        "align": "left",
+                    },
                     {"name": "error", "label": "Error", "field": "error", "align": "left"},
                 ],
                 rows=[],
@@ -190,15 +207,18 @@ def _build_ui() -> None:
             def _refresh_jobs() -> None:
                 rows = []
                 for j in STATE.queue.list_jobs(limit=20):
-                    rows.append({
-                        "id": j.id,
-                        "recording_id": j.recording_id,
-                        "status": j.status,
-                        "created_at": j.created_at,
-                        "error": (j.error or "")[:80],
-                    })
+                    rows.append(
+                        {
+                            "id": j.id,
+                            "recording_id": j.recording_id,
+                            "status": j.status,
+                            "created_at": j.created_at,
+                            "error": (j.error or "")[:80],
+                        }
+                    )
                 jobs_table.rows = rows
                 jobs_table.update()
+
             _refresh_jobs()
             ui.timer(2.0, _refresh_jobs)
 
@@ -211,7 +231,8 @@ def _build_ui() -> None:
                 recs_container.clear()
                 root = recordings_dir()
                 items = sorted(
-                    [p for p in root.iterdir() if p.is_dir()], reverse=True,
+                    [p for p in root.iterdir() if p.is_dir()],
+                    reverse=True,
                 )[:10]
                 with recs_container:
                     if not items:
@@ -230,8 +251,10 @@ def _build_ui() -> None:
                             ui.label(f"{d.name}").classes("font-mono text-sm flex-grow")
                             ui.label(f"{dur}s").classes("text-xs text-gray-500")
                             ui.button(
-                                "Open", on_click=lambda d=d: _open_folder(d),
+                                "Open",
+                                on_click=lambda d=d: _open_folder(d),
                             ).props("flat dense size=sm color=primary")
+
             _refresh_recs()
             ui.timer(3.0, _refresh_recs)
 
@@ -256,6 +279,7 @@ def _on_job_row_click(args) -> None:
 
 
 # ---------- first-run wizard ----------
+
 
 def _build_wizard() -> None:
     """One-screen wizard shown the very first time the GUI is launched.
@@ -295,8 +319,8 @@ def _build_wizard() -> None:
             gpu_label = (
                 "Local — NVIDIA GPU (recommended): WhisperX runs on your GPU. "
                 "All data stays on this machine."
-                if hw.has_cuda else
-                "Local — NVIDIA GPU (DISABLED: no GPU detected)"
+                if hw.has_cuda
+                else "Local — NVIDIA GPU (DISABLED: no GPU detected)"
             )
             cpu_label = (
                 "Local — CPU only: slow (~30-60 min per hour of audio), "
@@ -322,8 +346,7 @@ def _build_wizard() -> None:
                     return
                 if v == "remote_api":
                     ui.notify(
-                        "Remote API backend is not implemented yet. "
-                        "Pick a local option for now.",
+                        "Remote API backend is not implemented yet. Pick a local option for now.",
                         type="negative",
                     )
                     return
@@ -335,6 +358,7 @@ def _build_wizard() -> None:
 
 
 # ---------- entry point ----------
+
 
 def run_gui(*, port: int = 8765, native: bool = True) -> None:
     """Launch the desktop app.
@@ -366,6 +390,6 @@ def run_gui(*, port: int = 8765, native: bool = True) -> None:
         native=native,
         window_size=(1000, 800),
         reload=False,
-        show=not native,    # native handles its own window; for browser mode auto-open
+        show=not native,  # native handles its own window; for browser mode auto-open
         favicon="🎙️",
     )

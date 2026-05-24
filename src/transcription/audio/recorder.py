@@ -10,6 +10,7 @@ on disk that the pipeline immediately discards.
 Backward-compat: old recordings on disk as .wav remain readable thanks to
 the format-agnostic track lookup in pipeline/transcribe.py.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,33 +30,43 @@ DEFAULT_SAMPLE_RATE = 16_000
 DEFAULT_FORMAT = "flac"
 SUPPORTED_FORMATS = ("flac", "wav")
 
-CHUNK_SECONDS = 0.1  # 100 ms blocks; small enough for responsive stop, big enough to avoid syscall thrash
+CHUNK_SECONDS = (
+    0.1  # 100 ms blocks; small enough for responsive stop, big enough to avoid syscall thrash
+)
 
 
 @dataclass
 class TrackSpec:
-    label: str           # "mic" or "system"
+    label: str  # "mic" or "system"
     recorder_cm: object  # soundcard recorder context manager
     out_path: Path
     channels: int
     sample_rate: int
-    sf_format: str       # "FLAC" or "WAV" -- passed to sf.SoundFile
+    sf_format: str  # "FLAC" or "WAV" -- passed to sf.SoundFile
 
 
 def _stream_track(spec: TrackSpec, stop: threading.Event) -> None:
     spec.out_path.parent.mkdir(parents=True, exist_ok=True)
-    log.info("[%s] starting -> %s (%d Hz, %s)",
-             spec.label, spec.out_path, spec.sample_rate, spec.sf_format)
+    log.info(
+        "[%s] starting -> %s (%d Hz, %s)",
+        spec.label,
+        spec.out_path,
+        spec.sample_rate,
+        spec.sf_format,
+    )
     chunk_frames = int(spec.sample_rate * CHUNK_SECONDS)
     try:
-        with spec.recorder_cm as rec, sf.SoundFile(
-            str(spec.out_path),
-            mode="w",
-            samplerate=spec.sample_rate,
-            channels=spec.channels,
-            subtype="PCM_16",
-            format=spec.sf_format,
-        ) as f:
+        with (
+            spec.recorder_cm as rec,
+            sf.SoundFile(
+                str(spec.out_path),
+                mode="w",
+                samplerate=spec.sample_rate,
+                channels=spec.channels,
+                subtype="PCM_16",
+                format=spec.sf_format,
+            ) as f,
+        ):
             while not stop.is_set():
                 data = rec.record(numframes=chunk_frames)
                 f.write(data)
@@ -86,9 +97,7 @@ class DualRecorder:
     ) -> None:
         fmt = format.lower()
         if fmt not in SUPPORTED_FORMATS:
-            raise ValueError(
-                f"Unsupported format {format!r}. Use one of: {SUPPORTED_FORMATS}"
-            )
+            raise ValueError(f"Unsupported format {format!r}. Use one of: {SUPPORTED_FORMATS}")
         self.sample_rate = sample_rate
         self.format = fmt
 
@@ -104,7 +113,9 @@ class DualRecorder:
         self._specs = [
             TrackSpec(
                 label="mic",
-                recorder_cm=mic.recorder(samplerate=sample_rate, channels=1, blocksize=chunk_frames),
+                recorder_cm=mic.recorder(
+                    samplerate=sample_rate, channels=1, blocksize=chunk_frames
+                ),
                 out_path=self.mic_path,
                 channels=1,
                 sample_rate=sample_rate,
@@ -112,7 +123,9 @@ class DualRecorder:
             ),
             TrackSpec(
                 label="system",
-                recorder_cm=loopback.recorder(samplerate=sample_rate, channels=2, blocksize=chunk_frames),
+                recorder_cm=loopback.recorder(
+                    samplerate=sample_rate, channels=2, blocksize=chunk_frames
+                ),
                 out_path=self.system_path,
                 channels=2,
                 sample_rate=sample_rate,

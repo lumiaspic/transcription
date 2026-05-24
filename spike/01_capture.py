@@ -14,6 +14,7 @@ Run:
 During capture: speak into the mic AND play audio (YouTube, Discord call, etc.)
 to verify both streams are truly separate.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,7 +35,9 @@ def _record(recorder_cm, out_path: Path, duration: float, label: str) -> None:
         frames = rec.record(numframes=int(SAMPLE_RATE * duration))
         elapsed = time.time() - t0
     sf.write(str(out_path), frames, SAMPLE_RATE, subtype="PCM_16")
-    print(f"  [{label:6}] {len(frames) / SAMPLE_RATE:5.1f}s captured in {elapsed:5.1f}s -> {out_path}")
+    print(
+        f"  [{label:6}] {len(frames) / SAMPLE_RATE:5.1f}s captured in {elapsed:5.1f}s -> {out_path}"
+    )
 
 
 def list_devices() -> None:
@@ -75,15 +78,19 @@ def main() -> None:
     loop_rec = loopback.recorder(samplerate=SAMPLE_RATE, channels=2)
 
     threads = [
-        threading.Thread(target=_record, args=(mic_rec, args.out / "mic.wav", args.duration, "mic")),
-        threading.Thread(target=_record, args=(loop_rec, args.out / "system.wav", args.duration, "system")),
+        threading.Thread(
+            target=_record, args=(mic_rec, args.out / "mic.wav", args.duration, "mic")
+        ),
+        threading.Thread(
+            target=_record, args=(loop_rec, args.out / "system.wav", args.duration, "system")
+        ),
     ]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
 
-    print(f"\nDone. Play back both files to confirm they contain only their respective sources.")
+    print("\nDone. Play back both files to confirm they contain only their respective sources.")
 
 
 if __name__ == "__main__":
