@@ -1,23 +1,23 @@
-# Dependabot: surveille les CVE et ouvre des PR de mise à jour automatiques.
-# Doc complète: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# Dependabot: watches for CVEs and opens automatic update PRs.
+# Full docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
 updates:
-  # Dépendances Python gérées par uv (lit pyproject.toml + uv.lock).
+  # Python dependencies managed by uv (reads pyproject.toml + uv.lock).
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
-    # Regroupe les bumps mineurs/patchs en une seule PR par semaine — limite le bruit.
+    # Group minor/patch bumps into a single PR per week to reduce noise.
     groups:
       python-minor-and-patch:
         update-types:
           - "minor"
           - "patch"
 
-  # Versions des actions dans .github/workflows/*.yml (actions/checkout, astral-sh/setup-uv…).
+  # Action versions in .github/workflows/*.yml (actions/checkout, astral-sh/setup-uv…).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
