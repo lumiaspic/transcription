@@ -1,0 +1,25 @@
+# Hooks qui tournent automatiquement avant chaque commit local.
+# Installation: `uv run pre-commit install` (à faire une fois après clone).
+# Run manuel sur tout le repo: `uv run pre-commit run --all-files`.
+
+repos:
+  # Hooks "généralistes" maintenus par l'équipe pre-commit.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]  # bloque tout fichier > 500 Ko (vise les recordings/binaires)
+
+  # Ruff: même outil que la CI, en local avant push.
+  # rev: doit suivre la version dans pyproject.toml [dependency-groups] dev.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
