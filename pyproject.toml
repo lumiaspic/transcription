@@ -42,7 +42,7 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/transcription"]
 
-# Outils de dev (installés via `uv sync --group dev`, jamais embarqués dans le wheel).
+# Dev tools (installed via `uv sync --group dev`, never included in the wheel).
 [dependency-groups]
 dev = [
     "pre-commit>=4",
@@ -56,24 +56,24 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-# Sélection volontairement modeste pour démarrer — on durcira plus tard.
+# Deliberately conservative selection to start — can be tightened later.
 #   E,W = pycodestyle    F = pyflakes    I = isort    UP = pyupgrade    B = bugbear
 select = ["E", "W", "F", "I", "UP", "B"]
 ignore = [
-    "E501",  # longueur de ligne : laissée au formatteur
+    "E501",  # line length: left to the formatter
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # --cov enables coverage on the `transcription` package; xml is for Codecov,
-# term-missing for local feedback. --cov-report= (empty) en CLI désactive si besoin.
+# term-missing for local feedback. Pass --cov-report= (empty string) on the CLI to disable.
 addopts = "-ra --cov=transcription --cov-report=term-missing --cov-report=xml"
 
 [tool.coverage.run]
 source = ["src/transcription"]
 branch = true
-# Modules très liés au matériel/UI : exclus tant qu'on n'a pas de mocks dédiés,
-# sinon le % de couverture est dominé par du code intestable en CI.
+# Hardware/UI-coupled modules: excluded until we have proper mocks,
+# otherwise coverage % is dominated by untestable code in CI.
 omit = [
     "src/transcription/ui/*",
     "src/transcription/audio/*",
