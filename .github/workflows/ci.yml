@@ -55,9 +55,11 @@ jobs:
       - name: Install project + dev deps (sans l'extra "transcribe" qui pèse 5+ GB)
         run: uv sync --group dev
 
-      - name: Run pytest (+ coverage)
+      - name: Run pytest (+ coverage + JUnit report)
         # pytest-cov produit coverage.xml grâce à la config dans pyproject.toml.
-        run: uv run pytest -v
+        # --junitxml + junit_family=legacy : format attendu par Codecov Test Analytics
+        # (détection de tests flaky, dashboard d'échecs, commentaires sur les PR).
+        run: uv run pytest -v --junitxml=junit.xml -o junit_family=legacy
 
       - name: Upload coverage to Codecov
         # Ne tourne pas sur les forks (le secret n'y est pas dispo) — évite des échecs spurious.
@@ -65,6 +67,17 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
+          flags: py${{ matrix.python-version }}
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results to Codecov (Test Analytics)
+        # Tourne même si pytest a échoué : c'est précisément à ce moment-là qu'on
+        # veut voir les résultats apparaître dans le dashboard.
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+        uses: codecov/test-results-action@v1
+        with:
+          files: ./junit.xml
           flags: py${{ matrix.python-version }}
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
