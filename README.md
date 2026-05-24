@@ -4,6 +4,7 @@
 > Capture mic + system audio as two separate tracks, auto-transcribe with WhisperX + pyannote diarization, get a merged Markdown transcript on disk.
 
 [![CI](https://github.com/lumiaspic/transcription/actions/workflows/ci.yml/badge.svg)](https://github.com/lumiaspic/transcription/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/lumiaspic/transcription/graph/badge.svg)](https://codecov.io/gh/lumiaspic/transcription)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows 11](https://img.shields.io/badge/platform-Windows%2011-0078D6)](https://www.microsoft.com/windows)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue.svg)](https://www.python.org/)
