@@ -344,7 +344,13 @@ def _build_wizard() -> None:
                 "Local — CPU only: slow (~30-60 min per hour of audio), "
                 "but all-local and works on any machine."
             )
-            remote_label = "Remote API (coming soon — not implemented yet)"
+            remote_label = (
+                "Remote API: any OpenAI-compatible /audio/transcriptions endpoint "
+                "(OpenAI, Groq, self-hosted whisper.cpp). No diarization — both "
+                "tracks transcribe as single speakers. Configure via CLI: "
+                "`transcription config set remote_api_base_url ...`, "
+                "`set remote_api_model ...`, `set-token remote_api`."
+            )
 
             options = {
                 "local_gpu": gpu_label,
@@ -359,12 +365,6 @@ def _build_wizard() -> None:
                 if v == "local_gpu" and not hw.has_cuda:
                     ui.notify(
                         "No CUDA GPU detected — pick Local CPU instead.",
-                        type="negative",
-                    )
-                    return
-                if v == "remote_api":
-                    ui.notify(
-                        "Remote API backend is not implemented yet. Pick a local option for now.",
                         type="negative",
                     )
                     return

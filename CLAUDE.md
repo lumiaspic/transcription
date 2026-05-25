@@ -8,7 +8,7 @@ Local Windows desktop app that captures mic + system audio as two separate FLAC 
 
 Key design choices:
 - **SQLite is the only IPC** between GUI and worker (no sockets, no PID files).
-- **Single backend interface** (`TranscriptionBackend`) with one real implementation (`WhisperXLocalBackend`); a `RemoteAPIBackend` stub exists but is not yet implemented.
+- **Two backend implementations** behind one `TranscriptionBackend` interface: `WhisperXLocalBackend` (GPU/CPU) and `RemoteOpenAICompatBackend` (any OpenAI-compatible `/audio/transcriptions` endpoint — OpenAI, Groq, self-hosted whisper.cpp, …). The remote backend has no diarization, so MULTI tracks fall back to single-speaker.
 - **Packaging via `uv`**: managed git checkout updated with `git pull`, no single-binary build.
 - **Speaker labels are namespaced at merge time**: `MIC`, `SYSTEM_S0`, `SYSTEM_S1`.
 
@@ -43,7 +43,7 @@ uv run transcription --help  # CLI
 - **No French**: the codebase was initially partly in French; any remaining French should be translated.
 - **Comments**: only when the *why* is non-obvious. No summary docstrings.
 - **Tests**: mock at the boundary of hardware/UI-coupled code. The `transcribe` extra (~3 GB) is not installed in CI.
-- **Config**: lives in `%APPDATA%\transcription\config.toml`. Secrets (HuggingFace token) live in Windows Credential Manager via `keyring`.
+- **Config**: lives in `%APPDATA%\transcription\config.toml`. Secrets (HuggingFace token, remote API key) live in Windows Credential Manager via `keyring`.
 
 ## CI
 
