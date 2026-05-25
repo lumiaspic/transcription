@@ -10,6 +10,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Minimal default token permissions for all jobs. No job in this workflow needs
+# write access to anything: lint and test only read the repo and upload coverage
+# to Codecov (which uses its own token, not GITHUB_TOKEN); installer-smoke jobs
+# only clone and execute. Override per-job if a future job needs more.
+permissions:
+  contents: read
+
 jobs:
   # ---------------------------------------------------------------------------
   # Lint + format: fast, runs on Linux (no platform dependency).
