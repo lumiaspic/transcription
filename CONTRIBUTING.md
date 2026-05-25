@@ -26,10 +26,11 @@ uv run pre-commit install
    ```powershell
    uv run pytest
    ```
-4. Ensure linting passes:
+4. Ensure linting + type checks pass:
    ```powershell
    uv run ruff check .
    uv run ruff format --check .
+   uv run mypy
    ```
 5. Open a pull request against `main`.
 
@@ -44,5 +45,6 @@ uv run pre-commit install
 
 - [ ] `uv run pytest` passes locally (Windows recommended, CI will confirm)
 - [ ] `uv run ruff check . && uv run ruff format --check .` passes
+- [ ] `uv run mypy` passes
 - [ ] New public behaviour has tests
 - [ ] PR description explains *why* the change is needed, not just what it does
