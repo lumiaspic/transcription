@@ -24,12 +24,14 @@ class HardwareProbe:
     vram_gb: float | None
     cuda_version: str | None
     driver_version: str | None  # NVIDIA driver, if available
+    has_mps: bool = False  # Apple Silicon Metal Performance Shaders
 
     @classmethod
     def detect(cls) -> HardwareProbe:
         has_torch = False
         torch_version = None
         has_cuda = False
+        has_mps = False
         gpu_name = None
         vram_gb = None
         cuda_version = None
@@ -45,6 +47,12 @@ class HardwareProbe:
                 gpu_name = torch.cuda.get_device_name(0)
                 vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
                 cuda_version = torch.version.cuda
+            # MPS = Metal Performance Shaders, Apple Silicon GPU backend.
+            # Attribute is missing on older torch / non-mac builds.
+            try:
+                has_mps = bool(torch.backends.mps.is_available())
+            except AttributeError:
+                has_mps = False
         except ImportError:
             pass
 
@@ -74,9 +82,15 @@ class HardwareProbe:
             vram_gb=vram_gb,
             cuda_version=cuda_version,
             driver_version=driver_version,
+            has_mps=has_mps,
         )
 
     def summary(self) -> str:
         """One-liner suitable for logs."""
-        gpu = f"{self.gpu_name} {self.vram_gb:.1f}GB" if self.has_cuda else "no GPU"
+        if self.has_cuda:
+            gpu = f"{self.gpu_name} {self.vram_gb:.1f}GB"
+        elif self.has_mps:
+            gpu = "Apple Silicon (MPS)"
+        else:
+            gpu = "no GPU"
         return f"{self.platform} | Py{self.python_version} | {self.cpu_cores}c | {gpu}"

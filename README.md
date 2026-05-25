@@ -1,12 +1,12 @@
 # 🎙️ Transcription
 
-> Local Windows desktop app that replaces the OBS → FFmpeg → Colab → WhisperX workflow with one click.
+> Local desktop app that replaces the OBS → FFmpeg → Colab → WhisperX workflow with one click.
 > Capture mic + system audio as two separate tracks, auto-transcribe with WhisperX + pyannote diarization, get a merged Markdown transcript on disk.
 
 [![CI](https://github.com/lumiaspic/transcription/actions/workflows/ci.yml/badge.svg)](https://github.com/lumiaspic/transcription/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/lumiaspic/transcription/graph/badge.svg)](https://codecov.io/gh/lumiaspic/transcription)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: Windows 11](https://img.shields.io/badge/platform-Windows%2011-0078D6)](https://www.microsoft.com/windows)
+[![Platform: Windows | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue)](packaging/README.md)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue.svg)](https://www.python.org/)
 
 ---
@@ -21,32 +21,47 @@
 
 ## Status
 
-Personal prototype, used daily on Windows 11 with an NVIDIA GPU. Works also on CPU-only machines (slower). Built incrementally as a single pair-programming sprint with [Claude Code](https://claude.com/claude-code); the commit history is meant to be readable.
+Personal prototype, used daily on Windows 11 with an NVIDIA GPU. Works also on CPU-only machines and macOS (Apple Silicon via MPS, Intel via CPU). Built incrementally as a single pair-programming sprint with [Claude Code](https://claude.com/claude-code); the commit history is meant to be readable.
 
-## Install (~10 min, Windows 11)
+## Install (~10 min)
 
-The full procedure is in [`packaging/README.md`](packaging/README.md). TL;DR:
+Full instructions in [`packaging/README.md`](packaging/README.md).
 
-1. Download [`packaging/install.ps1`](packaging/install.ps1) — click the **Raw** button on GitHub, then save as.
+**Windows:**
+1. Download [`packaging/install.ps1`](packaging/install.ps1) — click **Raw** on GitHub, then save as.
 2. Open PowerShell where you saved it:
    ```powershell
    Set-ExecutionPolicy -Scope Process Bypass
    .\install.ps1
    ```
-   The script installs `git` and `uv` if missing, clones the repo into `%LOCALAPPDATA%\Programs\transcription`, syncs ~3 GB of CUDA wheels, and creates Desktop + Start Menu shortcuts.
+   Installs `git` + `uv` if missing, clones the repo into `%LOCALAPPDATA%\Programs\transcription`, syncs ~3 GB of CUDA wheels, creates Desktop + Start Menu shortcuts.
 3. Set your HuggingFace token (one-time, enables speaker diarization):
    ```powershell
    cd $env:LOCALAPPDATA\Programs\transcription
    uv run transcription config set-token huggingface
    ```
-   You also need to accept the licence on <https://huggingface.co/pyannote/speaker-diarization-community-1>.
-4. Launch via the **Transcription** Desktop shortcut. The first-run wizard detects your hardware and asks which backend mode to use.
+4. Launch via the **Transcription** Desktop shortcut.
+
+**macOS:**
+1. Download [`packaging/install.sh`](packaging/install.sh) — click **Raw**, save as.
+2. Run the installer:
+   ```bash
+   bash install.sh
+   ```
+   Installs `git` + `uv` if missing, clones the repo into `~/Applications/transcription`, syncs ~3 GB of CPU/MPS wheels, creates `~/.local/bin/transcription-gui`.
+3. Set your HuggingFace token:
+   ```bash
+   cd ~/Applications/transcription
+   uv run transcription config set-token huggingface
+   ```
+4. For system-audio capture, install [BlackHole](https://existential.audio/blackhole/): `brew install --cask blackhole-2ch`
+5. Launch: `transcription-gui`
 
 ## Usage
 
 ### GUI (primary)
 
-```powershell
+```bash
 transcription gui
 ```
 
@@ -59,12 +74,12 @@ The GUI runs its own worker thread inside the same process — no separate daemo
 
 ### CLI (alternative / power user)
 
-```powershell
+```bash
 transcription record --duration 60       # records, auto-enqueues
 transcription daemon                      # runs the background worker (CLI-only flow)
 transcription jobs list                   # show the queue
 transcription transcribe <id>             # synchronous one-off (blocks until done)
-transcription doctor                      # health check (Python, CUDA, HF token, jobs DB)
+transcription doctor                      # health check (Python, CUDA/MPS, HF token, jobs DB)
 transcription recover                     # finalize recordings interrupted by a crash
 transcription config show                 # current settings + token status
 ```
@@ -79,8 +94,9 @@ Full reference: `transcription --help` and `transcription <command> --help`.
 │              Start ▶ │ Stop ■ │ Jobs │ Recordings               │
 └────────────┬──────────────────────────┬─────────────────────────┘
              │                          │
-   WASAPI capture                  SQLite job queue
-   (mic + loopback)                (%APPDATA%\jobs.db, WAL mode)
+   Audio capture                   SQLite job queue
+   mic + loopback                  (jobs.db, WAL mode)
+   (WASAPI on Win / CoreAudio+BlackHole on mac)
              │                          │
              ▼                          ▼
    recordings/<id>/                Worker (same process,
@@ -106,7 +122,7 @@ Full reference: `transcription --help` and `transcription <command> --help`.
 
 A few design choices worth knowing about:
 
-- **SQLite is the only IPC** between the GUI and the worker. No sockets, no PID files. `sqlite3 %APPDATA%\transcription\jobs.db` is the debugging tool.
+- **SQLite is the only IPC** between the GUI and the worker. No sockets, no PID files. `sqlite3 <config-dir>/transcription/jobs.db` is the debugging tool (config dir: `%APPDATA%\transcription` on Windows, `~/Library/Application Support/transcription` on macOS).
 - **Speaker labels are namespaced at merge time**: the mic's `SPEAKER_00` and the system's `SPEAKER_00` are different people, so we relabel them globally (`MIC`, `SYSTEM_S0`, `SYSTEM_S1`) in `transcript.md`. Per-track JSON files keep the raw pyannote labels.
 - **Backend selection goes through a single switch** (`backends/factory.py::get_backend`). Adding a remote API impl is one new file plus unblocking one branch in the factory.
 - **Packaging uses `uv` over PyInstaller.** The install is a managed git checkout that updates with `git pull`; no 3-4 GB single binary to rebuild for every torch / whisperx version bump. See [`packaging/README.md`](packaging/README.md) for the rationale.
@@ -114,7 +130,7 @@ A few design choices worth knowing about:
 
 ## Configuration
 
-Lives in `%APPDATA%\transcription\config.toml`. Tokens (HuggingFace, future API keys) live in Windows Credential Manager via `transcription config set-token <service>` — never in a file.
+Lives in the platform config dir: `%APPDATA%\transcription\config.toml` on Windows, `~/Library/Application Support/transcription/config.toml` on macOS. Tokens (HuggingFace, future API keys) live in the OS keychain (Windows Credential Manager / macOS Keychain) via `transcription config set-token <service>` — never in a file.
 
 Most-used keys:
 
@@ -132,19 +148,19 @@ Per-recording overrides via `transcription record --model medium --sample-rate 4
 
 | | |
 |---|---|
-| Audio capture        | [soundcard](https://github.com/bastibe/SoundCard) (WASAPI loopback) |
+| Audio capture        | [soundcard](https://github.com/bastibe/SoundCard) (WASAPI on Windows, CoreAudio on macOS) |
 | Transcription        | [WhisperX](https://github.com/m-bain/whisperX) (Whisper + word-level alignment) |
 | Speaker diarization  | [pyannote-audio](https://github.com/pyannote/pyannote-audio) (`speaker-diarization-community-1`) |
 | CLI                  | [Typer](https://typer.tiangolo.com/) |
-| Desktop UI           | [NiceGUI](https://nicegui.io/) + [pywebview](https://pywebview.flowrl.com/) (Edge WebView2 native window on Win11) |
+| Desktop UI           | [NiceGUI](https://nicegui.io/) + [pywebview](https://pywebview.flowrl.com/) (Edge WebView2 on Windows, WebKit on macOS) |
 | Env / packaging      | [uv](https://docs.astral.sh/uv/) |
 | Job queue            | SQLite (stdlib, WAL mode) |
-| Token storage        | [keyring](https://github.com/jaraco/keyring) (Windows Credential Manager) |
+| Token storage        | [keyring](https://github.com/jaraco/keyring) (Windows Credential Manager / macOS Keychain) |
 
 ## Limitations and what's NOT done
 
-- **Windows only.** Audio capture uses WASAPI loopback; cross-platform would need a different backend (PortAudio / PulseAudio / CoreAudio loopback).
-- **System audio is captured as one combined stream.** No per-app separation yet (Discord-only / Teams-only / browser-only). The Windows Process Loopback API would unlock this — planned for v2.
+- **System audio loopback on macOS requires BlackHole + a Multi-Output Device.** Unlike Windows (WASAPI loopback is built-in), macOS needs a virtual audio device to capture speaker output. [BlackHole](https://existential.audio/blackhole/) is the recommended free option (`brew install --cask blackhole-2ch`). You then need to create a *Multi-Output Device* in Audio MIDI Setup that routes audio to both your speakers and BlackHole (see [`packaging/README.md`](packaging/README.md)). Microphone recording works without any of this.
+- **System audio is captured as one combined stream.** No per-app separation yet (Discord-only / Teams-only / browser-only). The Windows Process Loopback API would unlock this on Windows — planned for v2.
 - **No `RemoteAPIBackend` implementation yet.** Wizard exposes the option, factory has the slot, raise `RemoteBackendNotImplemented` for now. To be wired the day a remote endpoint is picked (Replicate, RunPod, or a self-hosted server reached via Tailscale).
 - **No real-time transcription.** Recording finalizes first, then the background worker transcribes. Adding streaming would require a different audio chunking + a streaming-capable backend.
 - **No CPU-only install variant.** The work PC install pulls the full CUDA wheels (~3 GB). A CPU-only extra in `pyproject.toml` would shrink this to ~500 MB but adds maintenance overhead.

@@ -52,19 +52,29 @@ def _check_torch(hw: HardwareProbe) -> HealthItem:
 
 
 def _check_gpu(hw: HardwareProbe) -> HealthItem:
+    name = "GPU"
     if not hw.has_torch:
-        return HealthItem("CUDA GPU", Severity.WARN, "skipped (PyTorch missing)")
+        return HealthItem(name, Severity.WARN, "skipped (PyTorch missing)")
     if hw.has_cuda:
         driver = f" (driver {hw.driver_version})" if hw.driver_version else ""
         return HealthItem(
-            "CUDA GPU",
+            name,
             Severity.OK,
-            f"{hw.gpu_name}, {hw.vram_gb:.1f} GB VRAM, CUDA {hw.cuda_version}{driver}",
+            f"CUDA — {hw.gpu_name}, {hw.vram_gb:.1f} GB VRAM, CUDA {hw.cuda_version}{driver}",
+        )
+    if hw.has_mps:
+        # Apple Silicon: MPS works for pyannote diarization but not for
+        # WhisperX/faster-whisper (CTranslate2 has no Metal backend yet),
+        # so transcription itself still runs on CPU. Surface this honestly.
+        return HealthItem(
+            name,
+            Severity.OK,
+            "Apple Silicon (MPS) — diarization will use MPS; WhisperX transcription still runs on CPU.",
         )
     return HealthItem(
-        "CUDA GPU",
+        name,
         Severity.WARN,
-        "Not available. Will run on CPU — expect ~30-60 min per 1 h of audio.",
+        "No GPU acceleration. Will run on CPU — expect ~30-60 min per 1 h of audio.",
     )
 
 

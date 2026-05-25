@@ -18,6 +18,7 @@ from pathlib import Path
 from nicegui import ui
 
 from .. import config as cfg
+from ..audio.devices import SystemLoopbackUnavailable
 from ..paths import recordings_dir
 from ..pipeline.hardware import HardwareProbe
 from .state import STATE
@@ -68,7 +69,24 @@ def _start_recording() -> None:
     rec_id = _new_recording_id()
     rec_dir = recordings_dir() / rec_id
     rec_dir.mkdir(parents=True, exist_ok=True)
-    STATE.begin_recording(rec_id, rec_dir)
+    try:
+        STATE.begin_recording(rec_id, rec_dir)
+    except SystemLoopbackUnavailable as e:
+        # Empty folder we just created — clean up so it doesn't pollute the list.
+        try:
+            rec_dir.rmdir()
+        except OSError:
+            pass
+        ui.notify(
+            f"System audio capture unavailable: {e}",
+            type="negative",
+            position="bottom",
+            multi_line=True,
+            close_button=True,
+            timeout=0,  # stay until dismissed — the message is long and important
+        )
+        log.warning("UI: start recording aborted (system loopback unavailable): %s", e)
+        return
     ui.notify(f"Recording started: {rec_id}", type="positive", position="bottom")
     log.info("UI: started recording %s", rec_id)
 

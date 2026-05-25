@@ -3,14 +3,25 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 APP_NAME = "transcription"
 
 
 def config_dir() -> Path:
-    """Per-user config dir. On Windows: %APPDATA%\\transcription\\"""
-    base = os.environ.get("APPDATA") or str(Path.home() / ".config")
+    """Per-user config dir.
+
+    - Windows : %APPDATA%\\transcription\\
+    - macOS   : ~/Library/Application Support/transcription/
+    - Linux   : ~/.config/transcription/
+    """
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+    elif sys.platform == "darwin":
+        base = str(Path.home() / "Library" / "Application Support")
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     p = Path(base) / APP_NAME
     p.mkdir(parents=True, exist_ok=True)
     return p
