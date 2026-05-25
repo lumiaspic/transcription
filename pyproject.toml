@@ -9,7 +9,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "soundcard>=0.4.3",
     "soundfile>=0.12.1",
-    "numpy>=2.2.6",
+    "numpy>=2.4.6",
     "typer>=0.12",
     "keyring>=24",
     "tomli-w>=1.0",
@@ -35,7 +35,7 @@ transcribe = [
     # ctranslate2 4.5+ links against cuDNN 9, which matches what torch 2.5
     # bundles. ctranslate2 4.4 needs cuDNN 8 and breaks on this combo.
     "ctranslate2>=4.5",
-    "whisperx>=3.1.1",
+    "whisperx>=3.8.6",
     # UI (NiceGUI + native window via pywebview: Edge WebView2 on Windows, WebKit on macOS)
     "nicegui>=2.0",
     "pywebview>=5.0",
