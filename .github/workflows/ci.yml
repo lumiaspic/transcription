@@ -81,3 +81,95 @@ jobs:
           flags: ${{ matrix.os }}-py${{ matrix.python-version }}
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Installer smoke tests.
+  #
+  # End-to-end run of the install scripts against the PR's own checkout. We
+  # use `--no-extras` to skip `uv sync --extra transcribe` (~3 GB of torch +
+  # whisperx wheels) — what's actually being validated is the script logic:
+  # argument parsing, prereq detection, git clone/update, base `uv sync`,
+  # launcher / shortcut creation. The heavy ML stack is exercised manually
+  # on developer machines and well-covered upstream.
+  # ---------------------------------------------------------------------------
+  installer-smoke-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # We need to be on the actual branch (not a detached HEAD on the
+          # merge commit) so the installer can clone --branch <name> from
+          # our local checkout.
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Run install.sh against local checkout
+        run: |
+          BRANCH=$(git branch --show-current)
+          TARGET="${RUNNER_TEMP}/transcription-smoke"
+          bash packaging/install.sh \
+            --install-dir "${TARGET}" \
+            --repo-url "${GITHUB_WORKSPACE}" \
+            --branch "${BRANCH}" \
+            --no-extras \
+            --no-launch
+
+      - name: Assert install postconditions
+        run: |
+          TARGET="${RUNNER_TEMP}/transcription-smoke"
+          test -d "${TARGET}/.git"          || { echo "missing .git";          exit 1; }
+          test -f "${TARGET}/pyproject.toml" || { echo "missing pyproject";    exit 1; }
+          test -d "${TARGET}/.venv"          || { echo "missing .venv";        exit 1; }
+          test -x "${HOME}/.local/bin/transcription-gui" || { echo "missing launcher"; exit 1; }
+          bash -n "${HOME}/.local/bin/transcription-gui" # launcher parses
+
+      - name: Re-run installer (exercise the update path)
+        run: |
+          BRANCH=$(git branch --show-current)
+          TARGET="${RUNNER_TEMP}/transcription-smoke"
+          bash packaging/install.sh \
+            --install-dir "${TARGET}" \
+            --repo-url "${GITHUB_WORKSPACE}" \
+            --branch "${BRANCH}" \
+            --no-extras \
+            --no-launch
+
+  installer-smoke-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Run install.ps1 against local checkout
+        shell: pwsh
+        run: |
+          $branch = (git branch --show-current).Trim()
+          $target = "$env:RUNNER_TEMP\transcription-smoke"
+          .\packaging\install.ps1 `
+            -InstallDir $target `
+            -RepoUrl $env:GITHUB_WORKSPACE `
+            -Branch $branch `
+            -NoExtras `
+            -NoLaunch
+
+      - name: Assert install postconditions
+        shell: pwsh
+        run: |
+          $target = "$env:RUNNER_TEMP\transcription-smoke"
+          if (-not (Test-Path "$target\.git" -PathType Container))         { throw "missing .git" }
+          if (-not (Test-Path "$target\pyproject.toml" -PathType Leaf))    { throw "missing pyproject" }
+          if (-not (Test-Path "$target\.venv" -PathType Container))        { throw "missing .venv" }
+          $desktop = [Environment]::GetFolderPath('Desktop')
+          if (-not (Test-Path "$desktop\Transcription.lnk" -PathType Leaf)) { throw "missing Desktop shortcut" }
+
+      - name: Re-run installer (exercise the update path)
+        shell: pwsh
+        run: |
+          $branch = (git branch --show-current).Trim()
+          $target = "$env:RUNNER_TEMP\transcription-smoke"
+          .\packaging\install.ps1 `
+            -InstallDir $target `
+            -RepoUrl $env:GITHUB_WORKSPACE `
+            -Branch $branch `
+            -NoExtras `
+            -NoLaunch

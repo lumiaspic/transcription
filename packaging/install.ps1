@@ -21,6 +21,11 @@
 .PARAMETER NoLaunch
     Don't auto-launch the GUI after install.
 
+.PARAMETER NoExtras
+    Skip `uv sync --extra transcribe` (torch, whisperx, nicegui, pywebview).
+    Useful for CI smoke tests and for users who only want the base CLI.
+    Transcription and the GUI will not work until you re-run without it.
+
 .EXAMPLE
     .\install.ps1
     Standard install to %LOCALAPPDATA%\Programs\transcription on the main branch.
@@ -34,7 +39,8 @@ param(
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\transcription",
     [string]$Branch = "main",
     [string]$RepoUrl = "https://github.com/lumiaspic/transcription.git",
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    [switch]$NoExtras
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,11 +135,21 @@ if (Test-Path "$InstallDir\.git") {
 
 # ---------- sync deps ----------
 
-Step "Installing Python environment (5-10 min the first time, ~3 GB of CUDA wheels)"
+if ($NoExtras) {
+    Step "Installing Python environment (base CLI only -- -NoExtras)"
+    Note "Skipping the 'transcribe' extra. Transcription and the GUI will not"
+    Note "work until you re-run without -NoExtras."
+} else {
+    Step "Installing Python environment (5-10 min the first time, ~3 GB of CUDA wheels)"
+}
 Push-Location $InstallDir
 try {
     try {
-        Invoke-Native { uv sync --extra transcribe } "uv sync --extra transcribe"
+        if ($NoExtras) {
+            Invoke-Native { uv sync } "uv sync"
+        } else {
+            Invoke-Native { uv sync --extra transcribe } "uv sync --extra transcribe"
+        }
     } catch {
         Write-Host ""
         Write-Host "uv sync failed. Common causes:" -ForegroundColor Red
@@ -199,7 +215,8 @@ Write-Host "  Uninstall     : packaging\uninstall.ps1"
 Write-Host "  Health check  : uv run transcription doctor"
 Write-Host ""
 
-if (-not $NoLaunch) {
+# Skip auto-launch with -NoExtras (the GUI deps were not installed).
+if (-not $NoLaunch -and -not $NoExtras) {
     Step "Launching Transcription GUI..."
     Start-Process -FilePath "wscript.exe" -ArgumentList "`"$launcher`"" -WorkingDirectory $InstallDir
 }
