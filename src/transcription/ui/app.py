@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from nicegui import ui
+from nicegui import app, ui
 
 from .. import config as cfg
 from ..audio.devices import SystemLoopbackUnavailable
@@ -24,6 +24,8 @@ from ..pipeline.hardware import HardwareProbe
 from .state import STATE
 
 log = logging.getLogger(__name__)
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 # ---------- helpers ----------
@@ -151,9 +153,12 @@ def _show_job_error(job_id: int) -> None:
 def _build_ui() -> None:
     # --- header ---
     with ui.header(elevated=True).classes("items-center justify-between"):
-        ui.label("Transcription").classes("text-xl font-bold")
-        with ui.row().classes("items-center gap-2"):
-            ui.label("Worker:").classes("text-sm")
+        with ui.element("div").classes("brand-lockup"):
+            ui.html(
+                '<img src="/static/mark.svg" alt="" class="brand-mark"/><span>Transcription</span>'
+            )
+        with ui.element("div").classes("worker-status"):
+            ui.label("Worker")
             worker_dot = ui.icon("circle").classes("text-base")
 
             def _update_dot() -> None:
@@ -166,27 +171,41 @@ def _build_ui() -> None:
     with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
         # --- Recording card ---
         with ui.card().classes("w-full"):
-            ui.label("Recording").classes("text-lg font-semibold")
+            with ui.row().classes("items-center justify-between w-full"):
+                ui.label("Recording").classes("card-title")
+                track_legend = ui.row().classes("items-center gap-2")
+                with track_legend:
+                    ui.html(
+                        '<span class="track-chip mic"><span class="swatch"></span>MIC</span>'
+                        '<span class="track-chip sys"><span class="swatch"></span>SYSTEM</span>'
+                    )
+                track_legend.visible = False
             with ui.row().classes("items-center gap-4"):
+                rec_dot = ui.html('<span class="rec-dot"></span>')
+                rec_dot.visible = False
                 start_btn = ui.button(
                     "● Start",
                     on_click=_start_recording,
-                ).props("color=positive size=lg")
+                ).props("color=positive size=lg unelevated")
                 stop_btn = ui.button(
                     "■ Stop",
                     on_click=_stop_recording_and_enqueue,
-                ).props("color=negative size=lg")
-                elapsed_label = ui.label("—").classes("text-3xl font-mono ml-auto")
+                ).props("color=negative size=lg unelevated")
+                elapsed_label = ui.label("—").classes("rec-timer ml-auto")
 
             def _tick() -> None:
                 if STATE.recording.active:
                     elapsed_label.text = _format_elapsed(STATE.recording_elapsed())
-                    elapsed_label.classes(add="text-red-500", remove="text-gray-400")
+                    elapsed_label.classes(add="active")
+                    rec_dot.visible = True
+                    track_legend.visible = True
                     start_btn.disable()
                     stop_btn.enable()
                 else:
                     elapsed_label.text = "—"
-                    elapsed_label.classes(add="text-gray-400", remove="text-red-500")
+                    elapsed_label.classes(remove="active")
+                    rec_dot.visible = False
+                    track_legend.visible = False
                     start_btn.enable()
                     stop_btn.disable()
 
@@ -196,8 +215,8 @@ def _build_ui() -> None:
         # --- Jobs card ---
         with ui.card().classes("w-full"):
             with ui.row().classes("items-center justify-between w-full"):
-                ui.label("Jobs queue").classes("text-lg font-semibold")
-                ui.label(f"{STATE.queue.db_path}").classes("text-xs text-gray-400 font-mono")
+                ui.label("Jobs queue").classes("card-title")
+                ui.label(f"{STATE.queue.db_path}").classes("card-aside")
             jobs_table = ui.table(
                 columns=[
                     {"name": "id", "label": "#", "field": "id", "align": "right"},
@@ -242,8 +261,8 @@ def _build_ui() -> None:
 
         # --- Recordings card ---
         with ui.card().classes("w-full"):
-            ui.label("Recordings (recent)").classes("text-lg font-semibold")
-            recs_container = ui.column().classes("w-full gap-1")
+            ui.label("Recordings (recent)").classes("card-title")
+            recs_container = ui.column().classes("w-full gap-0")
 
             def _refresh_recs() -> None:
                 recs_container.clear()
@@ -254,7 +273,9 @@ def _build_ui() -> None:
                 )[:10]
                 with recs_container:
                     if not items:
-                        ui.label("No recordings yet.").classes("text-sm text-gray-400 italic")
+                        ui.html(
+                            '<div class="rec-row"><span class="empty">No recordings yet.</span></div>'
+                        )
                         return
                     for d in items:
                         meta = _read_meta(d)
@@ -262,12 +283,10 @@ def _build_ui() -> None:
                         icon = "check_circle" if done else "schedule"
                         color = "text-green-600" if done else "text-gray-400"
                         dur = meta.get("duration_seconds", "?")
-                        with ui.row().classes(
-                            "w-full items-center gap-2 hover:bg-gray-100 px-2 py-1 rounded"
-                        ):
+                        with ui.row().classes("rec-row w-full"):
                             ui.icon(icon).classes(color)
-                            ui.label(f"{d.name}").classes("font-mono text-sm flex-grow")
-                            ui.label(f"{dur}s").classes("text-xs text-gray-500")
+                            ui.label(f"{d.name}").classes("rec-id")
+                            ui.label(f"{dur}s").classes("rec-dur")
                             ui.button(
                                 "Open",
                                 on_click=lambda d=d: _open_folder(d),
@@ -309,27 +328,27 @@ def _build_wizard() -> None:
     hw = HardwareProbe.detect()
 
     with ui.column().classes("w-full max-w-2xl mx-auto p-6 gap-4"):
-        ui.label("Welcome").classes("text-3xl font-bold")
+        ui.label("Welcome").classes("wizard-hero")
         ui.label(
             "First-run setup. Pick how transcription should run on this machine. "
             "You can change this later via `transcription config set backend_mode <mode>`."
-        ).classes("text-gray-600")
+        ).classes("wizard-lead")
 
         # Detected hardware
         with ui.card().classes("w-full"):
-            ui.label("Detected hardware").classes("text-lg font-semibold")
-            ui.label(f"• Platform : {hw.platform}").classes("font-mono text-sm")
-            ui.label(f"• CPU      : {hw.cpu_cores} cores").classes("font-mono text-sm")
+            ui.label("Detected hardware").classes("card-title")
+            ui.label(f"• Platform : {hw.platform}").classes("hw-row")
+            ui.label(f"• CPU      : {hw.cpu_cores} cores").classes("hw-row")
             if hw.has_cuda:
                 gpu = f"• GPU      : {hw.gpu_name} — {hw.vram_gb:.1f} GB VRAM"
-                ui.label(gpu).classes("font-mono text-sm text-green-700")
+                ui.label(gpu).classes("hw-row ok")
             else:
-                ui.label("• GPU      : none detected").classes("font-mono text-sm text-yellow-700")
-            ui.label(f"• Python   : {hw.python_version}").classes("font-mono text-sm")
+                ui.label("• GPU      : none detected").classes("hw-row warn")
+            ui.label(f"• Python   : {hw.python_version}").classes("hw-row")
 
         # Backend mode picker
         with ui.card().classes("w-full"):
-            ui.label("Backend mode").classes("text-lg font-semibold")
+            ui.label("Backend mode").classes("card-title")
 
             # Build options with informative labels. Disabled-state is communicated
             # via the label text and validated on save (NiceGUI radio has no
@@ -372,7 +391,9 @@ def _build_wizard() -> None:
                 ui.notify(f"Saved backend_mode={v}. Reloading…", type="positive")
                 ui.navigate.reload()
 
-            ui.button("Save and continue", on_click=_save).props("color=positive size=lg")
+            ui.button("Save and continue", on_click=_save).props(
+                "color=positive size=lg unelevated no-caps"
+            )
 
 
 # ---------- entry point ----------
@@ -390,12 +411,17 @@ def run_gui(*, port: int = 8765, native: bool = True) -> None:
     # so they show up in the jobs queue alongside any clean Stop from this session.
     STATE.recover_orphans()
 
+    # Serve the brand assets + theme stylesheet from /static/.
+    app.add_static_files("/static", str(_STATIC_DIR))
+
     # NiceGUI 2.x needs the root UI inside a @ui.page handler so it can
     # rebuild it on each browser/webview connection. Defining the route
     # lazily here keeps everything inside run_gui() and avoids the
     # "Script mode requires a valid script file" error.
     @ui.page("/")
     def _index() -> None:
+        # Stylesheet link must be inside the page scope (NiceGUI 3.x).
+        ui.add_head_html('<link rel="stylesheet" href="/static/theme.css">')
         # Dispatch: wizard on first run, main UI otherwise.
         if cfg.load_config().get("backend_mode") is None:
             _build_wizard()

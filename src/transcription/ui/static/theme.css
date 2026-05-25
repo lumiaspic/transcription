@@ -1,0 +1,275 @@
+/* Transcription — desktop theme.
+   Tokens + Quasar overrides distilled from the design system at
+   transcription-design-system/. The shipped Quasar palette
+   (positive/negative/warning/info) is kept; we add the brand
+   indigo and the MIC/SYSTEM two-track palette and tune typography,
+   radii and shadows for a high-density desktop window. */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* Neutrals */
+  --ink-1: #0f1419;
+  --ink-2: #364049;
+  --ink-3: #5b6670;
+  --ink-4: #8a949e;
+  --line-1: #e3e6ea;
+  --line-2: #d3d8dd;
+  --surface-0: #ffffff;
+  --surface-1: #f7f8fa;
+  --surface-2: #eef0f3;
+  --surface-3: #e3e6ea;
+
+  /* Brand indigo */
+  --brand-700: #2a3a8c;
+  --brand-600: #3548a8;
+  --brand-500: #4159c4;
+  --brand-100: #e6e9f7;
+  --brand-50:  #f3f5fb;
+
+  /* Two-track palette */
+  --mic-700: #8a4b00;
+  --mic-500: #d97706;
+  --mic-100: #fef3c7;
+  --sys-700: #0e5c5c;
+  --sys-500: #14a098;
+  --sys-100: #ccfbf1;
+
+  /* Status — mirrors Quasar */
+  --positive-500: #21ba45;
+  --positive-600: #1a9e3c;
+  --positive-700: #167a30;
+  --positive-100: #dcfce7;
+  --negative-500: #c10015;
+  --negative-600: #a30013;
+  --negative-700: #8a0010;
+  --negative-100: #fee2e2;
+  --warning-500: #f2c037;
+  --warning-700: #8a6500;
+  --info-600:    #0e8aae;
+  --info-100:    #cffafe;
+
+  /* Typography */
+  --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Radii, shadows, motion */
+  --radius-2: 4px;
+  --radius-3: 6px;
+  --shadow-1: 0 1px 3px rgba(15, 20, 25, 0.08), 0 1px 2px rgba(15, 20, 25, 0.04);
+  --shadow-2: 0 3px 6px rgba(15, 20, 25, 0.10), 0 2px 4px rgba(15, 20, 25, 0.06);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ---------- Body + Quasar resets ---------- */
+
+body, .q-page, .nicegui-content {
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+  background: var(--surface-1);
+}
+
+.q-page { padding: 0; }
+
+/* Mono everywhere we ask for it — tabular by default */
+.font-mono, .q-table td.font-mono {
+  font-family: var(--font-mono) !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+}
+
+/* ---------- Header / brand ---------- */
+
+.q-header {
+  background: var(--surface-0) !important;
+  color: var(--ink-1) !important;
+  box-shadow: var(--shadow-2) !important;
+  padding: 12px 24px;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+  padding-right: 8px;
+}
+.brand-lockup .brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.brand-lockup span {
+  line-height: 1;
+}
+
+.worker-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* ---------- Cards ---------- */
+
+.q-card {
+  border-radius: var(--radius-2) !important;
+  box-shadow: var(--shadow-1) !important;
+  background: var(--surface-0);
+}
+
+.card-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.005em;
+  color: var(--ink-1);
+}
+
+.card-aside {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+/* ---------- Recording controls ---------- */
+
+.rec-timer {
+  font-family: var(--font-mono) !important;
+  font-weight: 500 !important;
+  font-size: 36px !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-4);
+  transition: color 200ms var(--ease-standard);
+}
+.rec-timer.active { color: var(--negative-500); }
+
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--negative-500);
+  display: inline-block;
+  animation: rec-pulse 1.4s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+/* Two-track legend chips shown while recording */
+.track-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.track-chip.mic { background: var(--mic-100); color: var(--mic-700); }
+.track-chip.sys { background: var(--sys-100); color: var(--sys-700); }
+.track-chip .swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.track-chip.mic .swatch { background: var(--mic-500); }
+.track-chip.sys .swatch { background: var(--sys-500); }
+
+/* ---------- Jobs table (Quasar q-table overrides) ---------- */
+
+.q-table thead th {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3) !important;
+  background: var(--surface-1) !important;
+  border-bottom: 1px solid var(--line-2) !important;
+}
+.q-table tbody td {
+  font-size: 13px;
+  color: var(--ink-1);
+  border-bottom: 1px solid var(--line-1);
+  padding: 9px 12px;
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.q-table tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+/* ---------- Recordings list rows ---------- */
+
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-2);
+  transition: background 120ms var(--ease-standard);
+}
+.rec-row:hover { background: var(--surface-2); }
+.rec-row .rec-id {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink-1);
+  flex: 1;
+}
+.rec-row .rec-dur {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.rec-row .empty {
+  font-size: 13px;
+  color: var(--ink-4);
+  font-style: italic;
+}
+
+/* ---------- Wizard ---------- */
+
+.wizard-hero {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+.wizard-lead {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.hw-row {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.hw-row.ok   { color: var(--positive-700); }
+.hw-row.warn { color: var(--warning-700); }
+
+/* ---------- Focus rings ---------- */
+
+.q-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-1), 0 0 0 3px rgba(65, 89, 196, 0.30);
+}
