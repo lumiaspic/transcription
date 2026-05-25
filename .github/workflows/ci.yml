@@ -64,7 +64,7 @@ jobs:
       - name: Upload coverage to Codecov
         # Does not run on forks (secret not available there) to avoid spurious failures.
         if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
           flags: ${{ matrix.os }}-py${{ matrix.python-version }}
