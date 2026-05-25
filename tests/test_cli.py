@@ -7,7 +7,9 @@ Commands NOT covered here:
 - `record` and `gui` — hardware-bound (DualRecorder, NiceGUI window)
 - `daemon` — exercised in test_worker.py at the Worker level
 - `devices` — hardware-bound (soundcard enumeration)
-- `doctor` — exercised by test_hardware.py + test_health.py at unit level
+
+The `doctor` command lives here too, with HardwareProbe + run_health_checks
+stubbed (their unit-level tests are in test_hardware.py / test_health.py).
 """
 
 from __future__ import annotations
@@ -422,6 +424,131 @@ class TestConfigRemoveToken:
 
         assert result.exit_code == 0
         assert "No token" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# `doctor`
+# ---------------------------------------------------------------------------
+
+
+def _fake_hw(driver_version: str | None = None):
+    from transcription.pipeline.hardware import HardwareProbe
+
+    return HardwareProbe(
+        python_version="3.11.12",
+        platform="test-platform-x86_64",
+        cpu_cores=8,
+        has_torch=True,
+        torch_version="2.7.1",
+        has_cuda=False,
+        gpu_name=None,
+        vram_gb=None,
+        cuda_version=None,
+        driver_version=driver_version,
+        has_mps=False,
+    )
+
+
+def _patch_doctor(
+    monkeypatch: pytest.MonkeyPatch,
+    items: list,
+    hw=None,
+) -> None:
+    """Stub the two collaborators `doctor` imports lazily."""
+    from transcription.pipeline.hardware import HardwareProbe
+
+    monkeypatch.setattr(HardwareProbe, "detect", staticmethod(lambda: hw or _fake_hw()))
+    monkeypatch.setattr(
+        "transcription.pipeline.health.run_health_checks",
+        lambda hw=None: items,  # noqa: ARG005
+    )
+
+
+class TestDoctor:
+    def test_all_ok_exits_zero_and_prints_each_item(
+        self,
+        runner: CliRunner,
+        cli_env: Path,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from transcription.pipeline.health import HealthItem, Severity
+
+        items = [
+            HealthItem("Python", Severity.OK, "3.11.12"),
+            HealthItem("PyTorch", Severity.OK, "2.7.1"),
+        ]
+        _patch_doctor(monkeypatch, items)
+
+        result = runner.invoke(app, ["doctor"])
+
+        assert result.exit_code == 0
+        # Hardware header.
+        assert "test-platform-x86_64" in result.stdout
+        assert "8" in result.stdout  # cpu_cores
+        # Each health item name + message rendered.
+        assert "Python" in result.stdout
+        assert "3.11.12" in result.stdout
+        assert "PyTorch" in result.stdout
+        assert "2.7.1" in result.stdout
+
+    def test_any_error_item_exits_one(
+        self,
+        runner: CliRunner,
+        cli_env: Path,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The doctor's contract: exit non-zero iff at least one ERROR severity
+        # is present — so scripts and the install script can gate on it.
+        from transcription.pipeline.health import HealthItem, Severity
+
+        items = [
+            HealthItem("Python", Severity.OK, "3.11.12"),
+            HealthItem("PyTorch", Severity.ERROR, "Not installed."),
+        ]
+        _patch_doctor(monkeypatch, items)
+
+        result = runner.invoke(app, ["doctor"])
+
+        assert result.exit_code == 1
+        assert "Not installed." in result.stdout
+
+    def test_warn_only_still_exits_zero(
+        self,
+        runner: CliRunner,
+        cli_env: Path,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # WARN is informational — must not break scripts.
+        from transcription.pipeline.health import HealthItem, Severity
+
+        items = [HealthItem("GPU", Severity.WARN, "No GPU acceleration.")]
+        _patch_doctor(monkeypatch, items)
+
+        result = runner.invoke(app, ["doctor"])
+
+        assert result.exit_code == 0
+        assert "No GPU acceleration." in result.stdout
+
+    def test_nv_driver_line_shown_only_when_driver_present(
+        self,
+        runner: CliRunner,
+        cli_env: Path,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # With a driver: line is visible.
+        _patch_doctor(monkeypatch, [], hw=_fake_hw(driver_version="555.42"))
+        with_driver = runner.invoke(app, ["doctor"])
+
+        assert with_driver.exit_code == 0
+        assert "NV driver" in with_driver.stdout
+        assert "555.42" in with_driver.stdout
+
+        # Without (CPU-only / Apple Silicon machine): line is omitted.
+        _patch_doctor(monkeypatch, [], hw=_fake_hw(driver_version=None))
+        without_driver = runner.invoke(app, ["doctor"])
+
+        assert without_driver.exit_code == 0
+        assert "NV driver" not in without_driver.stdout
 
 
 # ---------------------------------------------------------------------------
