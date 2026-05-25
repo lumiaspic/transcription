@@ -363,7 +363,10 @@ class TestRemoteApiCheck:
         item = _by_name(items, "Remote API")
 
         assert item.severity is Severity.OK
-        assert "api.groq.com" in item.message
+        # Assert on the full URL (not just the host) so the test is strict
+        # AND so CodeQL doesn't flag this as `py/incomplete-url-substring-sanitization`
+        # — this is a status-message assertion, not URL validation.
+        assert "https://api.groq.com/openai/v1" in item.message
         assert "whisper-large-v3" in item.message
 
     def test_custom_token_service_is_respected(
