@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import FakeBackend
+from tests.conftest import FakeBackend, FakeDualRecorder
 from transcription import cli as cli_mod
 from transcription.cli import app
 
@@ -94,8 +94,11 @@ class TestListRecordings:
 
 
 # ---------------------------------------------------------------------------
-# `record` — only the early failure path is testable here.
-# Successful capture is hardware-bound and lives in manual testing.
+# `record`
+#
+# Hardware-bound parts (actual capture) are exercised in manual testing.
+# Everything around them — orchestration, meta.json, enqueue, error paths —
+# is covered here against a FakeDualRecorder.
 # ---------------------------------------------------------------------------
 
 
@@ -125,6 +128,108 @@ class TestRecord:
         recordings = cli_env / "recordings"
         leftover = [p for p in recordings.iterdir() if p.is_dir()] if recordings.exists() else []
         assert leftover == []
+
+    def test_duration_path_writes_meta_and_enqueues_job(
+        self,
+        runner: CliRunner,
+        cli_env: Path,
+        fake_dual_recorder: type[FakeDualRecorder],
+    ) -> None:
+        from transcription.pipeline.jobs import JobQueue
+
+        result = runner.invoke(app, ["record", "--duration", "1", "--name", "rec_happy"])
+
+        assert result.exit_code == 0
+        # Recorder lifecycle: constructed, started, stopped — in that order.
+        assert fake_dual_recorder.last_instance is not None
+        assert fake_dual_recorder.last_instance.started is True
+        assert fake_dual_recorder.last_instance.stopped is True
+        # meta.json was written with the right shape.
+        meta_path = cli_env / "recordings" / "rec_happy" / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert meta["id"] == "rec_happy"
+        assert meta["tracks"] == ["mic", "system"]
+        assert meta["transcribed"] is False
+        # A job was enqueued.
+        jobs = JobQueue().list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0].recording_id == "rec_happy"
+        assert "Enqueued as job" in result.stdout
+
+    def test_no_transcribe_flag_skips_enqueue(
+        self,
+        runner: CliRunner,
+        cli_env: Path,  # noqa: ARG002
+        fake_dual_recorder: type[FakeDualRecorder],  # noqa: ARG002
+    ) -> None:
+        # --no-transcribe is the "just give me audio, I'll handle the rest"
+        # escape hatch. Must NOT touch the JobQueue.
+        from transcription.pipeline.jobs import JobQueue
+
+        result = runner.invoke(
+            app, ["record", "--duration", "1", "--name", "rec_noenq", "--no-transcribe"]
+        )
+
+        assert result.exit_code == 0
+        assert "Skipping job enqueue" in result.stdout
+        assert JobQueue().list_jobs() == []
+
+    def test_overrides_propagate_to_recorder_constructor(
+        self,
+        runner: CliRunner,
+        cli_env: Path,  # noqa: ARG002
+        fake_dual_recorder: type[FakeDualRecorder],
+    ) -> None:
+        # Per-recording overrides (--mic, --speaker, --sample-rate, --format)
+        # must reach DualRecorder.__init__ verbatim — that's the only way they
+        # take effect for this run without mutating the saved config.
+        result = runner.invoke(
+            app,
+            [
+                "record",
+                "--duration",
+                "1",
+                "--no-transcribe",
+                "--mic",
+                "Custom Mic",
+                "--speaker",
+                "Custom Speakers",
+                "--sample-rate",
+                "48000",
+                "--format",
+                "wav",
+            ],
+        )
+
+        assert result.exit_code == 0
+        inst = fake_dual_recorder.last_instance
+        assert inst is not None
+        assert inst.mic_name == "Custom Mic"
+        assert inst.speaker_name == "Custom Speakers"
+        assert inst.sample_rate == 48000
+        assert inst.format == "wav"
+
+    def test_keyboard_interrupt_during_capture_still_finalizes(
+        self,
+        runner: CliRunner,
+        cli_env: Path,
+        fake_dual_recorder: type[FakeDualRecorder],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # User hits Ctrl+C mid-recording. The CLI must: stop the recorder,
+        # write meta.json, exit 0 (not crash with a stack trace). This is
+        # the open-ended capture path (`while True: time.sleep(0.5)`).
+        def _interrupt(_seconds: float) -> None:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(cli_mod.time, "sleep", _interrupt)
+
+        result = runner.invoke(app, ["record", "--name", "rec_ctrlc", "--no-transcribe"])
+
+        assert result.exit_code == 0
+        assert "Stopping" in result.stdout
+        assert fake_dual_recorder.last_instance.stopped is True
+        assert (cli_env / "recordings" / "rec_ctrlc" / "meta.json").exists()
 
 
 # ---------------------------------------------------------------------------

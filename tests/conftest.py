@@ -115,6 +115,62 @@ def fake_backend() -> FakeBackend:
 
 
 # ---------------------------------------------------------------------------
+# FakeDualRecorder — stand-in for audio.DualRecorder for tests of code that
+# constructs a recorder (e.g. the `record` CLI command, the GUI Recording
+# card). Records constructor kwargs and start/stop calls; never touches
+# audio devices or the filesystem.
+# ---------------------------------------------------------------------------
+
+
+class FakeDualRecorder:
+    """Mirrors DualRecorder's constructor surface without doing any I/O."""
+
+    # Set by the fixture before each test so assertions don't leak between
+    # tests if a previous one bailed before invoking the recorder.
+    last_instance: FakeDualRecorder | None = None
+
+    def __init__(
+        self,
+        out_dir: Path,
+        mic_name: str | None = None,
+        speaker_name: str | None = None,
+        *,
+        sample_rate: int = 16_000,
+        format: str = "flac",
+    ) -> None:
+        self.out_dir = out_dir
+        self.mic_name = mic_name
+        self.speaker_name = speaker_name
+        self.sample_rate = sample_rate
+        self.format = format
+        self.started = False
+        self.stopped = False
+        type(self).last_instance = self
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self, timeout: float = 5.0) -> None:  # noqa: ARG002
+        self.stopped = True
+
+
+@pytest.fixture
+def fake_dual_recorder(monkeypatch: pytest.MonkeyPatch) -> type[FakeDualRecorder]:
+    """Replace `cli.DualRecorder` with FakeDualRecorder and reset its state.
+
+    Yields the class so tests can read `.last_instance` after invoking a
+    command. Also patches `cli.time.sleep` to a no-op so the record loop's
+    `time.sleep(duration)` returns instantly.
+    """
+    from transcription import cli as cli_mod
+
+    FakeDualRecorder.last_instance = None
+    monkeypatch.setattr(cli_mod, "DualRecorder", FakeDualRecorder)
+    monkeypatch.setattr(cli_mod.time, "sleep", lambda _seconds: None)
+    return FakeDualRecorder
+
+
+# ---------------------------------------------------------------------------
 # Environment isolation — point the app's config dir at a per-test tmp dir.
 #
 # `paths.config_dir()` is platform-aware: APPDATA on Windows,
