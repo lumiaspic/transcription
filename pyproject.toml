@@ -2,7 +2,10 @@
 name = "transcription"
 version = "0.1.0"
 description = "Local audio capture + WhisperX transcription pipeline"
-requires-python = ">=3.10,<3.13"
+# 3.11 is the floor because `import tomllib` (config.py) is stdlib only since
+# 3.11. The CI matrix already only runs 3.11/3.12; this just makes the
+# pyproject claim match reality.
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "soundcard>=0.4.3",
     "soundfile>=0.12.1",
@@ -44,15 +47,50 @@ packages = ["src/transcription"]
 # Dev tools (installed via `uv sync --group dev`, never included in the wheel).
 [dependency-groups]
 dev = [
+    "mypy>=1.11",
     "pre-commit>=4",
     "pytest>=8",
     "pytest-cov>=5",
     "ruff>=0.6",
 ]
 
+[tool.mypy]
+# Type checks on the package only. Tests are loosely typed by convention
+# (CliRunner / monkeypatch / fixtures all return dynamic stuff).
+files = ["src/transcription"]
+python_version = "3.11"
+# Conservative starter set — mirrors the ruff approach (lint hygiene without
+# forcing every helper to be typed). Tighten over time, not all at once.
+#
+# `warn_unreachable` is deliberately off: mypy specializes `sys.platform`
+# against the runner's own OS, so cross-platform branches always look dead
+# from one side. Re-enable behind a per-platform matrix run.
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+# Third-party libs without bundled type stubs. They are stable surface for us
+# (audio I/O, GUI, transcribe extras), and writing local stubs is more work
+# than it's worth right now. Revisit if any of these starts misbehaving
+# silently.
+[[tool.mypy.overrides]]
+module = [
+    "ctranslate2",
+    "nicegui",
+    "nicegui.*",
+    "soundcard",
+    "soundfile",
+    "torch",
+    "torch.*",
+    "webview",
+    "whisperx",
+]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Deliberately conservative selection to start — can be tightened later.

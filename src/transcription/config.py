@@ -8,11 +8,11 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from typing import Any
 
 import keyring
 import tomli_w
-import tomllib
 
 from .paths import config_file
 
