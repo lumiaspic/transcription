@@ -11,6 +11,7 @@
 #   bash install.sh
 #   bash install.sh --install-dir ~/apps/transcription
 #   bash install.sh --branch main --no-launch
+#   bash install.sh --no-extras       # base CLI only; no torch/whisperx (CI smoke test)
 
 set -euo pipefail
 
@@ -20,6 +21,7 @@ INSTALL_DIR="${HOME}/Applications/transcription"
 BRANCH="main"
 REPO_URL="https://github.com/lumiaspic/transcription.git"
 NO_LAUNCH=0
+NO_EXTRAS=0
 
 # ---------- argument parsing ----------
 
@@ -29,6 +31,7 @@ while [[ $# -gt 0 ]]; do
         --branch)       BRANCH="$2";      shift 2 ;;
         --repo-url)     REPO_URL="$2";    shift 2 ;;
         --no-launch)    NO_LAUNCH=1;      shift   ;;
+        --no-extras)    NO_EXTRAS=1;      shift   ;;
         *) echo "Unknown option: $1" >&2; exit 1  ;;
     esac
 done
@@ -124,14 +127,27 @@ fi
 
 # ---------- sync deps ----------
 
-step "Installing Python environment (5-10 min the first time, ~3 GB of wheels)"
 cd "${INSTALL_DIR}"
-if ! uv sync --extra transcribe; then
-    echo "" >&2
-    echo "uv sync failed. Common causes:" >&2
-    echo "  - Disk full — PyTorch needs ~6 GB free during install" >&2
-    echo "  - Network interrupted — re-run install.sh, uv resumes partial downloads" >&2
-    exit 1
+# Two branches rather than an array expanded under `set -u` — empty arrays
+# don't expand cleanly on bash 3.2 (macOS default).
+if [[ "${NO_EXTRAS}" -eq 1 ]]; then
+    step "Installing Python environment (base CLI only — --no-extras)"
+    note "Skipping the 'transcribe' extra. Transcription and the GUI will not"
+    note "work until you re-run without --no-extras."
+    if ! uv sync; then
+        echo "" >&2
+        echo "uv sync failed. Re-run install.sh — uv resumes partial downloads." >&2
+        exit 1
+    fi
+else
+    step "Installing Python environment (5-10 min the first time, ~3 GB of wheels)"
+    if ! uv sync --extra transcribe; then
+        echo "" >&2
+        echo "uv sync failed. Common causes:" >&2
+        echo "  - Disk full — PyTorch needs ~6 GB free during install" >&2
+        echo "  - Network interrupted — re-run install.sh, uv resumes partial downloads" >&2
+        exit 1
+    fi
 fi
 done_ "Dependencies in ${INSTALL_DIR}/.venv"
 
@@ -180,7 +196,8 @@ echo "  Update later  : bash ${INSTALL_DIR}/packaging/install.sh"
 echo "  Health check  : uv run transcription doctor"
 echo ""
 
-if [[ "${NO_LAUNCH}" -eq 0 ]]; then
+# Skip auto-launch with --no-extras (the GUI deps were not installed).
+if [[ "${NO_LAUNCH}" -eq 0 ]] && [[ "${NO_EXTRAS}" -eq 0 ]]; then
     step "Launching Transcription GUI..."
     cd "${INSTALL_DIR}"
     uv run --extra transcribe transcription gui &
