@@ -1,11 +1,12 @@
 """Tests for `paths` — per-user filesystem locations.
 
 Uses the `isolated_config_dir` fixture (in conftest.py) so we never touch
-the developer's real %APPDATA% / ~/.config during the test run.
+the developer's real config dir during the test run.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,9 +15,9 @@ from transcription import paths
 
 
 class TestConfigDir:
-    def test_returns_appdata_subdir_when_env_var_is_set(self, isolated_config_dir: Path) -> None:
-        # `isolated_config_dir` already monkeypatches APPDATA → tmp_path/appdata.
-        # config_dir() must therefore return tmp_path/appdata/transcription.
+    def test_returns_platform_config_subdir(self, isolated_config_dir: Path) -> None:
+        # `isolated_config_dir` redirects HOME (and APPDATA on Windows) to
+        # a temp dir and returns the path config_dir() is expected to produce.
         assert paths.config_dir() == isolated_config_dir
 
     def test_creates_the_directory_if_missing(self, isolated_config_dir: Path) -> None:
@@ -26,16 +27,37 @@ class TestConfigDir:
 
         assert result.exists() and result.is_dir()
 
-    def test_falls_back_to_home_dot_config_when_appdata_unset(
+    def test_uses_library_application_support_on_macos(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # The Linux/macOS path: no APPDATA, use ~/.config/transcription.
-        monkeypatch.delenv("APPDATA", raising=False)
+        monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+        result = paths.config_dir()
+
+        assert result == tmp_path / "Library" / "Application Support" / "transcription"
+        assert result.exists()
+
+    def test_uses_dot_config_on_linux(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
         result = paths.config_dir()
 
         assert result == tmp_path / ".config" / "transcription"
+        assert result.exists()
+
+    def test_uses_appdata_on_windows(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "win32")
+        fake_appdata = tmp_path / "AppData" / "Roaming"
+        monkeypatch.setenv("APPDATA", str(fake_appdata))
+
+        result = paths.config_dir()
+
+        assert result == fake_appdata / "transcription"
         assert result.exists()
 
 

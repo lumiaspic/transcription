@@ -37,5 +37,8 @@ logs/
 .idea/
 *.swp
 
+# macOS Finder metadata
+.DS_Store
+
 # Claude Code local settings (machine-specific permissions)
 .claude/

@@ -6,6 +6,7 @@ without needing an explicit import (pytest convention).
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -116,20 +117,27 @@ def fake_backend() -> FakeBackend:
 # ---------------------------------------------------------------------------
 # Environment isolation — point the app's config dir at a per-test tmp dir.
 #
-# `paths.config_dir()` reads $APPDATA (Windows) or falls back to ~/.config.
-# We override BOTH so the test never touches the user's real config, no
-# matter which platform CI runs on.
+# `paths.config_dir()` is platform-aware: APPDATA on Windows,
+# ~/Library/Application Support on macOS, ~/.config elsewhere.
+# We redirect both APPDATA and HOME so no test ever touches the user's real
+# config, regardless of which platform CI runs on.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def isolated_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect `config_dir()` to a fresh tmp dir for this test."""
-    fake_appdata = tmp_path / "appdata"
-    monkeypatch.setenv("APPDATA", str(fake_appdata))
-    # Also override HOME so the Linux/macOS fallback path lands somewhere safe.
-    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
-    return fake_appdata / "transcription"  # what config_dir() will return
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
+    if sys.platform == "win32":
+        fake_appdata = fake_home / "AppData" / "Roaming"
+        monkeypatch.setenv("APPDATA", str(fake_appdata))
+        return fake_appdata / "transcription"
+    elif sys.platform == "darwin":
+        return fake_home / "Library" / "Application Support" / "transcription"
+    else:
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        return fake_home / ".config" / "transcription"
 
 
 # ---------------------------------------------------------------------------

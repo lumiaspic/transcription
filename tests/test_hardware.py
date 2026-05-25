@@ -22,6 +22,7 @@ def _install_fake_torch(
     *,
     version: str = "2.7.1+test",
     has_cuda: bool = False,
+    has_mps: bool = False,
     gpu_name: str = "Fake RTX 5090",
     vram_bytes: int = 24 * 1024**3,
     cuda_version: str | None = "12.4",
@@ -37,6 +38,9 @@ def _install_fake_torch(
     )
     fake.cuda = cuda  # type: ignore[attr-defined]
     fake.version = types.SimpleNamespace(cuda=cuda_version)  # type: ignore[attr-defined]
+    fake.backends = types.SimpleNamespace(  # type: ignore[attr-defined]
+        mps=types.SimpleNamespace(is_available=lambda: has_mps),
+    )
 
     monkeypatch.setitem(sys.modules, "torch", fake)
     return fake
@@ -82,6 +86,7 @@ class TestDetect:
         assert probe.has_torch is False
         assert probe.torch_version is None
         assert probe.has_cuda is False
+        assert probe.has_mps is False
         assert probe.gpu_name is None
         assert probe.vram_gb is None
         assert probe.cuda_version is None
@@ -114,6 +119,17 @@ class TestDetect:
         assert probe.gpu_name == "RTX 5090"
         assert probe.vram_gb == pytest.approx(24.0, abs=0.01)
         assert probe.cuda_version == "12.4"
+
+    def test_torch_with_mps_sets_has_mps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Apple Silicon path: MPS available, no CUDA.
+        _install_fake_torch(monkeypatch, has_cuda=False, has_mps=True)
+        _disable_nvidia_smi(monkeypatch)
+
+        probe = HardwareProbe.detect()
+
+        assert probe.has_mps is True
+        assert probe.has_cuda is False
+        assert probe.gpu_name is None  # MPS doesn't expose a device name here
 
     def test_nvidia_smi_when_present_populates_driver_version(
         self, monkeypatch: pytest.MonkeyPatch
@@ -187,3 +203,23 @@ class TestSummary:
 
         assert "RTX 5090" in out
         assert "24.0GB" in out
+
+    def test_summary_mentions_mps_on_apple_silicon(self) -> None:
+        probe = HardwareProbe(
+            python_version="3.11.12",
+            platform="macOS-14-arm64",
+            cpu_cores=8,
+            has_torch=True,
+            torch_version="2.8.0",
+            has_cuda=False,
+            gpu_name=None,
+            vram_gb=None,
+            cuda_version=None,
+            driver_version=None,
+            has_mps=True,
+        )
+
+        out = probe.summary()
+
+        assert "MPS" in out
+        assert "no GPU" not in out

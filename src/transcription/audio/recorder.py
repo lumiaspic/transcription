@@ -14,6 +14,7 @@ the format-agnostic track lookup in pipeline/transcribe.py.
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,20 @@ SUPPORTED_FORMATS = ("flac", "wav")
 CHUNK_SECONDS = (
     0.1  # 100 ms blocks; small enough for responsive stop, big enough to avoid syscall thrash
 )
+
+
+def _driver_blocksize(chunk_frames: int) -> int | None:
+    """Buffer size passed to soundcard.recorder().
+
+    WASAPI (Windows) accepts arbitrary sizes, so we match it to our chunk_frames
+    to keep the driver buffer aligned with our read loop.
+    CoreAudio (macOS) caps blocksize at 512 frames; passing larger values raises
+    TypeError. We pass None and let CoreAudio pick a device-appropriate value —
+    record(numframes=chunk_frames) still aggregates to our 100ms target.
+    """
+    if sys.platform == "darwin":
+        return None
+    return chunk_frames
 
 
 @dataclass
@@ -106,6 +121,7 @@ class DualRecorder:
         self.system_path = out_dir / f"system.{fmt}"
 
         chunk_frames = int(sample_rate * CHUNK_SECONDS)
+        driver_blocksize = _driver_blocksize(chunk_frames)
         mic = devices.get_mic(mic_name)
         loopback = devices.get_system_loopback(speaker_name)
         sf_format = fmt.upper()
@@ -114,7 +130,7 @@ class DualRecorder:
             TrackSpec(
                 label="mic",
                 recorder_cm=mic.recorder(
-                    samplerate=sample_rate, channels=1, blocksize=chunk_frames
+                    samplerate=sample_rate, channels=1, blocksize=driver_blocksize
                 ),
                 out_path=self.mic_path,
                 channels=1,
@@ -124,7 +140,7 @@ class DualRecorder:
             TrackSpec(
                 label="system",
                 recorder_cm=loopback.recorder(
-                    samplerate=sample_rate, channels=2, blocksize=chunk_frames
+                    samplerate=sample_rate, channels=2, blocksize=driver_blocksize
                 ),
                 out_path=self.system_path,
                 channels=2,

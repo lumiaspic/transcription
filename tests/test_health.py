@@ -24,6 +24,7 @@ def _probe(
     python_version: str = "3.11.12",
     has_torch: bool = True,
     has_cuda: bool = False,
+    has_mps: bool = False,
     gpu_name: str | None = None,
     vram_gb: float | None = None,
     cuda_version: str | None = None,
@@ -40,6 +41,7 @@ def _probe(
         vram_gb=vram_gb,
         cuda_version=cuda_version,
         driver_version=driver_version,
+        has_mps=has_mps,
     )
 
 
@@ -117,16 +119,16 @@ class TestTorchAndGpuChecks:
         # No point grading the GPU situation if torch isn't even there.
         items = run_health_checks(_probe(has_torch=False))
 
-        assert _by_name(items, "CUDA GPU").severity is Severity.WARN
+        assert _by_name(items, "GPU").severity is Severity.WARN
 
-    def test_torch_ok_no_cuda_is_warn_with_cpu_estimate(
+    def test_torch_ok_no_gpu_is_warn_with_cpu_estimate(
         self,
         isolated_config_dir,
         fake_keyring,  # noqa: ARG002
     ) -> None:
-        items = run_health_checks(_probe(has_torch=True, has_cuda=False))
+        items = run_health_checks(_probe(has_torch=True, has_cuda=False, has_mps=False))
 
-        gpu_item = _by_name(items, "CUDA GPU")
+        gpu_item = _by_name(items, "GPU")
         assert gpu_item.severity is Severity.WARN
         # User-facing warning: how long it'll take on CPU.
         assert "CPU" in gpu_item.message
@@ -147,12 +149,25 @@ class TestTorchAndGpuChecks:
             )
         )
 
-        gpu_item = _by_name(items, "CUDA GPU")
+        gpu_item = _by_name(items, "GPU")
         assert gpu_item.severity is Severity.OK
         assert "RTX 5090" in gpu_item.message
         assert "24.0 GB" in gpu_item.message
         assert "12.4" in gpu_item.message
         assert "555.42" in gpu_item.message
+
+    def test_torch_ok_with_mps_is_ok_with_apple_silicon_note(
+        self,
+        isolated_config_dir,
+        fake_keyring,  # noqa: ARG002
+    ) -> None:
+        items = run_health_checks(_probe(has_torch=True, has_cuda=False, has_mps=True))
+
+        gpu_item = _by_name(items, "GPU")
+        assert gpu_item.severity is Severity.OK
+        assert "MPS" in gpu_item.message
+        # Be transparent: WhisperX still runs on CPU on macOS.
+        assert "CPU" in gpu_item.message
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +288,7 @@ def test_run_health_checks_returns_exactly_six_items(
     assert names == [
         "Python",
         "PyTorch",
-        "CUDA GPU",
+        "GPU",
         "HuggingFace token",
         "Backend mode",
         "Jobs DB",
