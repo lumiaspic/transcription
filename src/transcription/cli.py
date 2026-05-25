@@ -28,6 +28,7 @@ import typer
 
 from . import config as cfg
 from .audio import devices as audio_devices
+from .audio.devices import SystemLoopbackUnavailable
 from .audio.recorder import DualRecorder
 from .backends.factory import get_backend
 from .paths import recordings_dir
@@ -115,7 +116,19 @@ def record(
     typer.echo(f"  system : {speaker or '(default)'}")
     typer.echo(f"  audio  : {sr} Hz {fmt}")
 
-    recorder = DualRecorder(rec_dir, mic_name=mic, speaker_name=speaker, sample_rate=sr, format=fmt)
+    try:
+        recorder = DualRecorder(
+            rec_dir, mic_name=mic, speaker_name=speaker, sample_rate=sr, format=fmt
+        )
+    except SystemLoopbackUnavailable as e:
+        # Clean up the empty directory we just created so it doesn't pollute
+        # `list_recordings`.
+        try:
+            rec_dir.rmdir()
+        except OSError:
+            pass
+        typer.secho(f"\nSystem audio capture is not available: {e}", fg=typer.colors.RED)
+        raise typer.Exit(code=1) from e
     recorder.start()
     started = time.time()
     try:

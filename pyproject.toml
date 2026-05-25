@@ -1,7 +1,7 @@
 [project]
 name = "transcription"
 version = "0.0.1"
-description = "Local Windows audio capture + WhisperX transcription pipeline"
+description = "Local audio capture + WhisperX transcription pipeline"
 requires-python = ">=3.10,<3.13"
 dependencies = [
     "soundcard>=0.4.3",
@@ -18,11 +18,10 @@ transcription = "transcription.cli:app"
 [project.optional-dependencies]
 transcribe = [
     # setuptools<81 because ctranslate2 4.5/4.6 still `import pkg_resources`
-    # on Windows (see ctranslate2/__init__.py); pkg_resources is deprecated
-    # in setuptools 81 and removed in 82, so 82+ breaks `import ctranslate2`
-    # on the Win11 target of this extra. ctranslate2 4.7.0+ switched to
-    # importlib.resources, so this cap can be lifted once we require >=4.7.
-    # Do not let Dependabot raise this (last attempt: PR #18).
+    # (see ctranslate2/__init__.py); pkg_resources is deprecated in setuptools
+    # 81 and removed in 82, so 82+ breaks `import ctranslate2`.
+    # ctranslate2 4.7.0+ switched to importlib.resources — this cap can be
+    # lifted once we require >=4.7. Do not let Dependabot raise this (#18).
     "setuptools<81",
     "torch>=2.7.1",
     "torchaudio>=2.7.1",
@@ -30,7 +29,7 @@ transcribe = [
     # bundles. ctranslate2 4.4 needs cuDNN 8 and breaks on this combo.
     "ctranslate2>=4.5",
     "whisperx>=3.1.1",
-    # UI (NiceGUI + native window via Microsoft Edge WebView2, preinstalled on Win11)
+    # UI (NiceGUI + native window via pywebview: Edge WebView2 on Windows, WebKit on macOS)
     "nicegui>=2.0",
     "pywebview>=5.0",
 ]
@@ -89,11 +88,16 @@ exclude_also = [
 show_missing = true
 skip_covered = false
 
-# PyTorch CUDA wheels are not on PyPI - they live on download.pytorch.org.
-# We tell uv to fetch torch and torchaudio from the CUDA 12.4 index.
+# PyTorch CUDA wheels are not on PyPI — they live on download.pytorch.org.
+# On Windows we pull from the CUDA 12.8 index; on macOS PyTorch ships on PyPI
+# with CPU + MPS (Apple Silicon) support, so no custom index is needed there.
 [tool.uv.sources]
-torch = { index = "pytorch-cu128" }
-torchaudio = { index = "pytorch-cu128" }
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+]
+torchaudio = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"

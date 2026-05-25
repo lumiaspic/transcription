@@ -34,13 +34,14 @@ jobs:
         run: uv run ruff format --check .
 
   # ---------------------------------------------------------------------------
-  # Tests: on Windows (the real target — soundcard needs Win/Pulse).
+  # Tests: Windows and macOS (soundcard supports WASAPI and CoreAudio).
   # ---------------------------------------------------------------------------
   test:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [windows-latest, macos-latest]
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v6
@@ -66,7 +67,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
-          flags: py${{ matrix.python-version }}
+          flags: ${{ matrix.os }}-py${{ matrix.python-version }}
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -77,6 +78,6 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           files: ./junit.xml
-          flags: py${{ matrix.python-version }}
+          flags: ${{ matrix.os }}-py${{ matrix.python-version }}
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
