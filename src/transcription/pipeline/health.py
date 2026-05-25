@@ -7,14 +7,14 @@ early instead of letting them blow up the first job 15 seconds in.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from ..config import get_token, load_config
 from ..paths import jobs_db
 from .hardware import HardwareProbe
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     OK = "ok"
     WARN = "warn"
     ERROR = "error"

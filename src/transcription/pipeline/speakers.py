@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class SpeakerProfile(str, Enum):
+class SpeakerProfile(StrEnum):
     """How to handle speaker assignment for a given track."""
 
     SOLO = "solo"  # Single known speaker (e.g. own mic). No diarization, all -> SPEAKER_00.

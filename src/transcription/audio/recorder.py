@@ -16,8 +16,10 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import soundfile as sf
 
@@ -53,7 +55,9 @@ def _driver_blocksize(chunk_frames: int) -> int | None:
 @dataclass
 class TrackSpec:
     label: str  # "mic" or "system"
-    recorder_cm: object  # soundcard recorder context manager
+    # soundcard's recorder() returns a context manager yielding the recorder
+    # object; soundcard has no type stubs, so the inner type is Any.
+    recorder_cm: AbstractContextManager[Any]
     out_path: Path
     channels: int
     sample_rate: int

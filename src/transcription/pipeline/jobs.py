@@ -112,7 +112,11 @@ class JobQueue:
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (recording_id, str(recording_dir), model, language, int(diarize), _now()),
             )
-            return int(cur.lastrowid)
+            # lastrowid is Optional[int] in the stubs, but it's guaranteed to
+            # be set right after a successful INSERT — narrow with an assert
+            # so the type checker doesn't have to take our word for it.
+            assert cur.lastrowid is not None
+            return cur.lastrowid
 
     # ---------- consumer side ----------
 

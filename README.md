@@ -7,7 +7,7 @@
 [![codecov](https://codecov.io/gh/lumiaspic/transcription/graph/badge.svg)](https://codecov.io/gh/lumiaspic/transcription)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows | macOS](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue)](packaging/README.md)
-[![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue.svg)](https://www.python.org/)
+[![Python 3.11–3.12](https://img.shields.io/badge/python-3.11%E2%80%933.12-blue.svg)](https://www.python.org/)
 
 ---
 

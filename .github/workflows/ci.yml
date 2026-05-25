@@ -40,6 +40,11 @@ jobs:
       - name: Ruff (format check)
         run: uv run ruff format --check .
 
+      - name: mypy (type check)
+        # Runs against src/ only (config in pyproject.toml). Tests are
+        # loosely typed by convention.
+        run: uv run mypy
+
   # ---------------------------------------------------------------------------
   # Tests: Windows and macOS (soundcard supports WASAPI and CoreAudio).
   # ---------------------------------------------------------------------------
