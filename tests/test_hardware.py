@@ -131,6 +131,30 @@ class TestDetect:
         assert probe.has_cuda is False
         assert probe.gpu_name is None  # MPS doesn't expose a device name here
 
+    def test_old_torch_without_mps_backend_does_not_crash(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Older torch builds (or non-mac wheels) don't have torch.backends.mps.
+        # The probe must swallow the AttributeError and report has_mps=False
+        # instead of blowing up the doctor command.
+        fake = types.ModuleType("torch")
+        fake.__version__ = "2.0.0+old"  # type: ignore[attr-defined]
+        fake.cuda = types.SimpleNamespace(  # type: ignore[attr-defined]
+            is_available=lambda: False,
+            get_device_name=lambda _i: "",
+            get_device_properties=lambda _i: types.SimpleNamespace(total_memory=0),
+        )
+        fake.version = types.SimpleNamespace(cuda=None)  # type: ignore[attr-defined]
+        # Deliberately no `fake.backends` — accessing torch.backends.mps will
+        # raise AttributeError.
+        monkeypatch.setitem(sys.modules, "torch", fake)
+        _disable_nvidia_smi(monkeypatch)
+
+        probe = HardwareProbe.detect()
+
+        assert probe.has_torch is True
+        assert probe.has_mps is False  # graceful degradation
+
     def test_nvidia_smi_when_present_populates_driver_version(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

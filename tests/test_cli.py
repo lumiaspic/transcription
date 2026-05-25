@@ -92,6 +92,40 @@ class TestListRecordings:
 
 
 # ---------------------------------------------------------------------------
+# `record` — only the early failure path is testable here.
+# Successful capture is hardware-bound and lives in manual testing.
+# ---------------------------------------------------------------------------
+
+
+class TestRecord:
+    def test_clean_error_when_system_loopback_unavailable(
+        self,
+        runner: CliRunner,
+        cli_env: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # On macOS without BlackHole, DualRecorder construction raises
+        # SystemLoopbackUnavailable. The CLI must surface a friendly message
+        # (no stack trace), exit 1, and clean up the empty recording folder.
+        from transcription.audio.devices import SystemLoopbackUnavailable
+
+        def _explode(*_a: object, **_kw: object) -> object:
+            raise SystemLoopbackUnavailable("no virtual audio device")
+
+        monkeypatch.setattr(cli_mod, "DualRecorder", _explode)
+
+        result = runner.invoke(app, ["record", "--duration", "1", "--no-transcribe"])
+
+        assert result.exit_code == 1
+        assert "System audio capture is not available" in result.stdout
+        assert "no virtual audio device" in result.stdout
+        # The empty rec_dir we created must be cleaned up so `list` stays tidy.
+        recordings = cli_env / "recordings"
+        leftover = [p for p in recordings.iterdir() if p.is_dir()] if recordings.exists() else []
+        assert leftover == []
+
+
+# ---------------------------------------------------------------------------
 # `transcribe` (synchronous)
 # ---------------------------------------------------------------------------
 
