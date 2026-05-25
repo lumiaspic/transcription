@@ -16,6 +16,12 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # setuptools 81 deprecates pkg_resources, 82 removes it — breaks
+      # ctranslate2 <4.7 (see pyproject.toml `transcribe` extra). Lift this
+      # cap once we require ctranslate2>=4.7.
+      - dependency-name: "setuptools"
+        versions: [">=81"]
 
   # Action versions in .github/workflows/*.yml (actions/checkout, astral-sh/setup-uv…).
   - package-ecosystem: "github-actions"
