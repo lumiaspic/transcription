@@ -100,6 +100,37 @@ def _check_backend_mode() -> HealthItem:
     )
 
 
+def _check_remote_api() -> HealthItem | None:
+    """Only runs when backend_mode=remote_api; returns None otherwise so the
+    check doesn't add noise for users on the local path."""
+    cfg = load_config()
+    if cfg.get("backend_mode") != "remote_api":
+        return None
+    missing: list[str] = []
+    if not cfg.get("remote_api_base_url"):
+        missing.append("remote_api_base_url")
+    if not cfg.get("remote_api_model"):
+        missing.append("remote_api_model")
+    token_service = cfg.get("remote_api_token_service") or "remote_api"
+    if not get_token(token_service):
+        missing.append(f"keyring token for '{token_service}'")
+    if missing:
+        return HealthItem(
+            "Remote API",
+            Severity.ERROR,
+            "Missing: "
+            + ", ".join(missing)
+            + ". Run `transcription config set remote_api_base_url ...` / "
+            "`set remote_api_model ...` / "
+            f"`set-token {token_service}`.",
+        )
+    return HealthItem(
+        "Remote API",
+        Severity.OK,
+        f"{cfg['remote_api_base_url']} (model={cfg['remote_api_model']})",
+    )
+
+
 def _check_jobs_db() -> HealthItem:
     try:
         import sqlite3
@@ -123,11 +154,15 @@ def _check_jobs_db() -> HealthItem:
 def run_health_checks(hw: HardwareProbe | None = None) -> list[HealthItem]:
     """Returns one HealthItem per check, in the order they should be shown."""
     hw = hw or HardwareProbe.detect()
-    return [
+    items: list[HealthItem] = [
         _check_python(hw),
         _check_torch(hw),
         _check_gpu(hw),
         _check_hf_token(),
         _check_backend_mode(),
-        _check_jobs_db(),
     ]
+    remote = _check_remote_api()
+    if remote is not None:
+        items.append(remote)
+    items.append(_check_jobs_db())
+    return items

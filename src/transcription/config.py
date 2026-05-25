@@ -19,10 +19,16 @@ from .paths import config_file
 KEYRING_SERVICE = "transcription-app"
 
 # Known token services. Adding a new remote backend means adding a name here.
+#
+# `remote_api` is the generic slot used by the OpenAI-compatible backend
+# (RemoteOpenAICompatBackend). It covers OpenAI, Groq, self-hosted whisper.cpp
+# / faster-whisper-server, and anything else exposing
+# `POST /audio/transcriptions`. Users who juggle several providers can pick a
+# different keyring service via the `remote_api_token_service` config key
+# (e.g. set it to "groq" and store the token under that name).
 KNOWN_TOKEN_SERVICES = {
     "huggingface": "HuggingFace token (for pyannote diarization models)",
-    "replicate": "Replicate API token (future remote backend)",
-    "runpod": "RunPod API key (future remote backend)",
+    "remote_api": "Remote transcription API key (OpenAI / Groq / self-hosted)",
 }
 
 
@@ -42,6 +48,18 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # you also want playback-quality archives.
     "recording_sample_rate": 16000,
     "recording_format": "flac",  # "flac" (lossless, ~50% of WAV) | "wav"
+    # Remote API backend (used only when backend_mode == "remote_api").
+    # Any OpenAI-compatible /audio/transcriptions endpoint works:
+    #   - OpenAI       : https://api.openai.com/v1
+    #   - Groq         : https://api.groq.com/openai/v1
+    #   - whisper.cpp  : http://localhost:8080/v1   (self-hosted)
+    # `remote_api_token_service` is the name under which the API key is stored
+    # in the OS keyring — defaults to "remote_api" but can point at a custom
+    # slot if you keep multiple providers' keys side by side.
+    "remote_api_base_url": None,
+    "remote_api_model": None,
+    "remote_api_token_service": "remote_api",
+    "remote_api_timeout_seconds": 600,
 }
 
 

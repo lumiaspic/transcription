@@ -275,13 +275,13 @@ class TestJobsDbCheck:
 # ---------------------------------------------------------------------------
 
 
-def test_run_health_checks_returns_exactly_six_items(
+def test_run_health_checks_returns_six_items_on_local_mode(
     isolated_config_dir,
     fake_keyring,  # noqa: ARG002
 ) -> None:
     # Documented contract: Python, PyTorch, CUDA GPU, HuggingFace token,
-    # Backend mode, Jobs DB. Six items, always — order matters for the doctor
-    # output layout.
+    # Backend mode, Jobs DB. Six items by default — the Remote API row only
+    # appears when backend_mode=remote_api. Order matters for doctor layout.
     items = run_health_checks(_probe())
 
     names = [i.name for i in items]
@@ -304,3 +304,89 @@ def test_run_health_checks_calls_probe_detect_when_none_provided(
     items = run_health_checks()  # no probe passed
 
     assert len(items) == 6
+
+
+class TestRemoteApiCheck:
+    """The Remote API check is conditional: only surfaces when the user
+    actually opted into remote_api mode, so doctor stays terse for local
+    users (and they're the majority)."""
+
+    def test_no_remote_api_row_when_mode_is_local(
+        self,
+        isolated_config_dir,  # noqa: ARG002
+        fake_keyring,  # noqa: ARG002
+    ) -> None:
+        from transcription import config as cfg
+
+        cfg.save_config({**cfg.DEFAULT_CONFIG, "backend_mode": "local_cpu"})
+
+        items = run_health_checks(_probe())
+
+        assert "Remote API" not in [i.name for i in items]
+
+    def test_missing_config_is_error_listing_what_to_set(
+        self,
+        isolated_config_dir,  # noqa: ARG002
+        fake_keyring,  # noqa: ARG002
+    ) -> None:
+        from transcription import config as cfg
+
+        cfg.save_config({**cfg.DEFAULT_CONFIG, "backend_mode": "remote_api"})
+
+        items = run_health_checks(_probe())
+        item = _by_name(items, "Remote API")
+
+        assert item.severity is Severity.ERROR
+        # Every missing piece must be named so the user fixes them in one go.
+        assert "remote_api_base_url" in item.message
+        assert "remote_api_model" in item.message
+        assert "remote_api" in item.message  # keyring token slot
+
+    def test_complete_config_with_token_is_ok_showing_endpoint(
+        self,
+        isolated_config_dir,  # noqa: ARG002
+        fake_keyring: dict[tuple[str, str], str],
+    ) -> None:
+        from transcription import config as cfg
+
+        cfg.save_config(
+            {
+                **cfg.DEFAULT_CONFIG,
+                "backend_mode": "remote_api",
+                "remote_api_base_url": "https://api.groq.com/openai/v1",
+                "remote_api_model": "whisper-large-v3",
+            }
+        )
+        fake_keyring[(cfg.KEYRING_SERVICE, "remote_api")] = "sk-x"
+
+        items = run_health_checks(_probe())
+        item = _by_name(items, "Remote API")
+
+        assert item.severity is Severity.OK
+        assert "api.groq.com" in item.message
+        assert "whisper-large-v3" in item.message
+
+    def test_custom_token_service_is_respected(
+        self,
+        isolated_config_dir,  # noqa: ARG002
+        fake_keyring: dict[tuple[str, str], str],
+    ) -> None:
+        # Users who keep multiple providers' keys in keyring can point the
+        # backend at a custom slot. The check must follow that pointer.
+        from transcription import config as cfg
+
+        cfg.save_config(
+            {
+                **cfg.DEFAULT_CONFIG,
+                "backend_mode": "remote_api",
+                "remote_api_base_url": "https://api.openai.com/v1",
+                "remote_api_model": "whisper-1",
+                "remote_api_token_service": "openai",
+            }
+        )
+        # Token stored under "openai", NOT "remote_api"
+        fake_keyring[(cfg.KEYRING_SERVICE, "openai")] = "sk-openai"
+
+        items = run_health_checks(_probe())
+
+        assert _by_name(items, "Remote API").severity is Severity.OK
