@@ -16,11 +16,13 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import soundfile as sf
 
 from . import devices
@@ -62,6 +64,10 @@ class TrackSpec:
     channels: int
     sample_rate: int
     sf_format: str  # "FLAC" or "WAV" -- passed to sf.SoundFile
+    # Called after each captured chunk with a peak amplitude in [0.0, 1.0].
+    # Used by the GUI to drive live level meters. No-op default so the spec
+    # is still useful in tests that don't care about levels.
+    on_level: Callable[[float], None] = field(default=lambda _v: None)
 
 
 def _stream_track(spec: TrackSpec, stop: threading.Event) -> None:
@@ -89,6 +95,14 @@ def _stream_track(spec: TrackSpec, stop: threading.Event) -> None:
             while not stop.is_set():
                 data = rec.record(numframes=chunk_frames)
                 f.write(data)
+                # Peak amplitude over the chunk. soundcard returns float32 in
+                # [-1, 1] so this stays bounded. Cheap (~100 µs for a 1600-
+                # frame stereo block) and runs once per CHUNK_SECONDS.
+                try:
+                    peak = float(np.abs(data).max()) if data.size else 0.0
+                except Exception:
+                    peak = 0.0
+                spec.on_level(peak)
         log.info("[%s] stopped cleanly", spec.label)
     except Exception:
         log.exception("[%s] recording failed", spec.label)
@@ -124,6 +138,12 @@ class DualRecorder:
         self.mic_path = out_dir / f"mic.{fmt}"
         self.system_path = out_dir / f"system.{fmt}"
 
+        # Live peak levels, updated by the capture threads on every chunk.
+        # Plain float writes are atomic under the GIL — no lock needed for a
+        # ~10 Hz reader (the GUI tick).
+        self.mic_level: float = 0.0
+        self.system_level: float = 0.0
+
         chunk_frames = int(sample_rate * CHUNK_SECONDS)
         driver_blocksize = _driver_blocksize(chunk_frames)
         mic = devices.get_mic(mic_name)
@@ -140,6 +160,7 @@ class DualRecorder:
                 channels=1,
                 sample_rate=sample_rate,
                 sf_format=sf_format,
+                on_level=self._set_mic_level,
             ),
             TrackSpec(
                 label="system",
@@ -150,10 +171,17 @@ class DualRecorder:
                 channels=2,
                 sample_rate=sample_rate,
                 sf_format=sf_format,
+                on_level=self._set_system_level,
             ),
         ]
         self._stop = threading.Event()
         self._threads: list[threading.Thread] = []
+
+    def _set_mic_level(self, value: float) -> None:
+        self.mic_level = value
+
+    def _set_system_level(self, value: float) -> None:
+        self.system_level = value
 
     def start(self) -> None:
         if self._threads:

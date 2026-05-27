@@ -145,6 +145,11 @@ class FakeDualRecorder:
         self.format = format
         self.started = False
         self.stopped = False
+        # Mirror the live peak attributes the real recorder exposes — the GUI
+        # reads them via getattr() with a default, but tests of GUI code may
+        # want to write deterministic values here.
+        self.mic_level: float = 0.0
+        self.system_level: float = 0.0
         type(self).last_instance = self
 
     def start(self) -> None:
