@@ -189,6 +189,27 @@ body, .q-page, .nicegui-content {
 .track-chip.mic .swatch { background: var(--mic-500); }
 .track-chip.sys .swatch { background: var(--sys-500); }
 
+/* ---------- Status badges (Jobs table) ---------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  text-transform: lowercase;
+}
+.badge .q-icon { font-size: 13px !important; }
+.badge.pending { background: var(--surface-2); color: var(--ink-2); }
+.badge.running { background: var(--info-100); color: var(--info-600); }
+.badge.done    { background: var(--positive-100); color: var(--positive-700); }
+.badge.failed  { background: var(--negative-100); color: var(--negative-700); }
+
 /* ---------- Jobs table (Quasar q-table overrides) ---------- */
 
 .q-table thead th {
@@ -266,6 +287,137 @@ body, .q-page, .nicegui-content {
 }
 .hw-row.ok   { color: var(--positive-700); }
 .hw-row.warn { color: var(--warning-700); }
+
+/* ---------- Wizard radio rows ---------- */
+
+.radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.radio-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-2);
+  cursor: pointer;
+  transition: border-color 200ms var(--ease-standard),
+              background 200ms var(--ease-standard);
+}
+.radio-row:hover { background: var(--surface-1); }
+.radio-row.selected {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
+.radio-row.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.radio-row.disabled:hover { background: transparent; }
+
+.radio-row .dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid var(--ink-4);
+  flex-shrink: 0;
+  margin-top: 1px;
+  position: relative;
+  transition: border-color 200ms var(--ease-standard);
+}
+.radio-row.selected .dot { border-color: var(--brand-500); }
+.radio-row.selected .dot::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--brand-500);
+}
+
+.radio-row .body-l {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.radio-row .title-l {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink-1);
+  line-height: 1.3;
+}
+.radio-row .sub-l {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.radio-row .tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-700);
+  background: var(--brand-100);
+  padding: 2px 6px;
+  border-radius: var(--radius-1);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.radio-row .tag.warn {
+  color: var(--warning-700);
+  background: #fef3c7;
+}
+
+/* ---------- Error dialog ---------- */
+
+.job-error-dialog .q-card {
+  padding: 20px 22px !important;
+  border-radius: var(--radius-3) !important;
+  box-shadow: 0 10px 20px rgba(15, 20, 25, 0.12),
+              0 4px 8px rgba(15, 20, 25, 0.06) !important;
+}
+.job-error-dialog .dlg-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--ink-1);
+}
+.job-error-dialog .dlg-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.job-error-dialog .dlg-divider {
+  height: 1px;
+  background: var(--line-1);
+  margin: 4px 0;
+}
+.job-error-dialog .dlg-label {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.job-error-dialog pre.dlg-pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: #0f1419;
+  color: #e6eaef;
+  padding: 12px 14px;
+  border-radius: var(--radius-2);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
 
 /* ---------- Focus rings ---------- */
 
