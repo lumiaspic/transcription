@@ -209,6 +209,72 @@ body, .q-page, .nicegui-content {
 .badge.running { background: var(--info-100); color: var(--info-600); }
 .badge.done    { background: var(--positive-100); color: var(--positive-700); }
 .badge.failed  { background: var(--negative-100); color: var(--negative-700); }
+/* The badge always stays on one line; its parent cell already has nowrap. */
+.q-table .badge { white-space: nowrap; }
+
+/* ---------- Level meters (live MIC/SYSTEM peaks) ---------- */
+
+.meters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-1);
+  margin-top: 4px;
+}
+.meter-row {
+  display: grid !important;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 10px;
+}
+.meter-row .lbl {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.meter-row .lbl.mic { color: var(--mic-700); }
+.meter-row .lbl.sys { color: var(--sys-700); }
+.meter-row .db {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-track {
+  position: relative;
+  height: 10px;
+  background: var(--line-1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.meter-track::before {
+  content: "";
+  display: block;
+  height: 100%;
+  width: var(--level, 0%);
+  transition: width 80ms linear;
+}
+.meter-track.mic::before { background: var(--mic-500); }
+.meter-track.sys::before { background: var(--sys-500); }
+/* Faux-segment overlay: 40 hairlines drawn on top of the fill so the bar
+   reads as the discrete-step meters in the design system. */
+.meter-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(2.5% - 1px),
+    var(--surface-0) calc(2.5% - 1px),
+    var(--surface-0) 2.5%
+  );
+}
 
 /* ---------- Jobs table (Quasar q-table overrides) ---------- */
 
@@ -227,10 +293,18 @@ body, .q-page, .nicegui-content {
   color: var(--ink-1);
   border-bottom: 1px solid var(--line-1);
   padding: 9px 12px;
-  white-space: normal !important;
+  vertical-align: top;
+  /* Default: don't break mid-word — mono IDs and timestamps should stay
+     on one line. Only the error cell gets `.cell-wrap` (see slot below). */
+  white-space: nowrap;
+}
+.q-table tbody td.cell-wrap {
+  white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
-  vertical-align: top;
+  /* The error column is the only flexible one — let it take whatever space
+     is left after the fixed-content columns. */
+  max-width: 320px;
 }
 .q-table tbody tr:hover td {
   background: var(--surface-2);

@@ -11,6 +11,7 @@ import datetime as dt
 import html
 import json
 import logging
+import math
 import os
 import subprocess
 import sys
@@ -69,6 +70,23 @@ _STATUS_ICONS = {
     "done": "check_circle",
     "failed": "error",
 }
+
+
+# Floor for the dB readout — peaks below this read as silent. Keeps the meter
+# from flapping at -60 / -∞ / "—" while there's a tiny noise floor.
+_DB_FLOOR = -60.0
+
+
+def _peak_to_db_text(peak: float) -> str:
+    """Format a [0, 1] peak as a `-NN dB` string for the live meter readout."""
+    if peak <= 0 or not math.isfinite(peak):
+        return "—"
+    db = 20 * math.log10(min(1.0, peak))
+    if db >= -0.5:
+        return "0 dB"
+    if db <= _DB_FLOOR:
+        return "—"
+    return f"{db:.0f} dB"
 
 
 # ---------- actions ----------
@@ -209,24 +227,52 @@ def _build_ui() -> None:
                 ).props("color=negative size=lg unelevated")
                 elapsed_label = ui.label("—").classes("rec-timer ml-auto")
 
+            # Live peak meters — visible only while recording. Two rows of
+            # [LABEL | track | dB] using the design-system MIC/SYSTEM palette.
+            meters = ui.column().classes("meters w-full")
+            with meters:
+                with ui.row().classes("meter-row w-full"):
+                    ui.html('<span class="lbl mic">MIC</span>')
+                    mic_track = ui.element("div").classes("meter-track mic")
+                    mic_track.style("--level: 0%")
+                    mic_db = ui.label("—").classes("db")
+                with ui.row().classes("meter-row w-full"):
+                    ui.html('<span class="lbl sys">SYSTEM</span>')
+                    sys_track = ui.element("div").classes("meter-track sys")
+                    sys_track.style("--level: 0%")
+                    sys_db = ui.label("—").classes("db")
+            meters.visible = False
+
             def _tick() -> None:
                 if STATE.recording.active:
                     elapsed_label.text = _format_elapsed(STATE.recording_elapsed())
                     elapsed_label.classes(add="active")
                     rec_dot.visible = True
                     track_legend.visible = True
+                    meters.visible = True
                     start_btn.disable()
                     stop_btn.enable()
+                    rec = STATE.recording.recorder
+                    mic_peak = float(getattr(rec, "mic_level", 0.0)) if rec else 0.0
+                    sys_peak = float(getattr(rec, "system_level", 0.0)) if rec else 0.0
+                    mic_track.style(f"--level: {min(100.0, mic_peak * 100):.1f}%")
+                    sys_track.style(f"--level: {min(100.0, sys_peak * 100):.1f}%")
+                    mic_db.text = _peak_to_db_text(mic_peak)
+                    sys_db.text = _peak_to_db_text(sys_peak)
                 else:
                     elapsed_label.text = "—"
                     elapsed_label.classes(remove="active")
                     rec_dot.visible = False
                     track_legend.visible = False
+                    meters.visible = False
                     start_btn.enable()
                     stop_btn.disable()
 
             _tick()
-            ui.timer(0.5, _tick)
+            # 100ms cadence matches the audio chunk size — meters feel live
+            # without burning CPU. The other 0.5s tasks (elapsed text, button
+            # state) run on the same tick; cost is negligible.
+            ui.timer(0.1, _tick)
 
         # --- Jobs card ---
         with ui.card().classes("w-full"):
@@ -264,6 +310,17 @@ def _build_ui() -> None:
                     <q-icon :name="props.row.status_icon" size="13px"></q-icon>
                     {{ props.row.status }}
                   </span>
+                </q-td>
+                """,
+            )
+            # Only the Error column wraps long messages — every other column
+            # holds compact mono content (IDs, timestamps) and should stay on
+            # one line. See `.cell-wrap` in theme.css.
+            jobs_table.add_slot(
+                "body-cell-error",
+                """
+                <q-td :props="props" class="cell-wrap">
+                  {{ props.row.error }}
                 </q-td>
                 """,
             )
