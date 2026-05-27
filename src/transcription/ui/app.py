@@ -8,6 +8,7 @@ continuously while the GUI is open.
 from __future__ import annotations
 
 import datetime as dt
+import html
 import json
 import logging
 import os
@@ -60,6 +61,14 @@ def _format_elapsed(seconds: float) -> str:
     h, rem = divmod(s, 3600)
     m, s = divmod(rem, 60)
     return f"{h:d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+_STATUS_ICONS = {
+    "pending": "schedule",
+    "running": "graphic_eq",
+    "done": "check_circle",
+    "failed": "error",
+}
 
 
 # ---------- actions ----------
@@ -135,15 +144,22 @@ def _show_job_error(job_id: int) -> None:
     j = STATE.queue.get(job_id)
     if not j:
         return
-    with ui.dialog() as dialog, ui.card().classes("min-w-[600px]"):
-        ui.label(f"Job #{j.id} — {j.recording_id}").classes("text-lg font-bold")
-        ui.label(f"Status: {j.status}").classes("text-sm text-gray-600")
-        ui.separator()
-        ui.label("Error:").classes("font-semibold")
-        ui.code(j.error or "(no error message)").classes("w-full")
-        with ui.row():
-            ui.button("Retry", on_click=lambda: (STATE.queue.retry(j.id), dialog.close()))
-            ui.button("Close", on_click=dialog.close)
+    err_text = html.escape(j.error or "(no error message)")
+    with (
+        ui.dialog().classes("job-error-dialog") as dialog,
+        ui.card().classes("min-w-[600px] gap-3"),
+    ):
+        ui.label(f"Job #{j.id} — {j.recording_id}").classes("dlg-title")
+        ui.label(f"Status: {j.status}").classes("dlg-sub")
+        ui.html('<div class="dlg-divider"></div>')
+        ui.label("Error").classes("dlg-label")
+        ui.html(f'<pre class="dlg-pre">{err_text}</pre>')
+        with ui.row().classes("justify-end gap-2 w-full"):
+            ui.button("Close", on_click=dialog.close).props("flat color=primary no-caps")
+            ui.button(
+                "Retry",
+                on_click=lambda: (STATE.queue.retry(j.id), dialog.close()),
+            ).props("color=primary unelevated no-caps")
     dialog.open()
 
 
@@ -238,6 +254,19 @@ def _build_ui() -> None:
                 rows=[],
                 row_key="id",
             ).classes("w-full")
+            # Render the Status column as a colored pill badge with a leading
+            # Material icon — see `.badge.*` rules in theme.css.
+            jobs_table.add_slot(
+                "body-cell-status",
+                """
+                <q-td :props="props">
+                  <span :class="'badge ' + props.row.status">
+                    <q-icon :name="props.row.status_icon" size="13px"></q-icon>
+                    {{ props.row.status }}
+                  </span>
+                </q-td>
+                """,
+            )
             # Clicking a row opens the recording folder, or the error dialog if failed.
             jobs_table.on("rowClick", lambda e: _on_job_row_click(e.args))
 
@@ -249,6 +278,7 @@ def _build_ui() -> None:
                             "id": j.id,
                             "recording_id": j.recording_id,
                             "status": j.status,
+                            "status_icon": _STATUS_ICONS.get(j.status, "schedule"),
                             "created_at": j.created_at,
                             "error": (j.error or "")[:80],
                         }
@@ -350,37 +380,85 @@ def _build_wizard() -> None:
         with ui.card().classes("w-full"):
             ui.label("Backend mode").classes("card-title")
 
-            # Build options with informative labels. Disabled-state is communicated
-            # via the label text and validated on save (NiceGUI radio has no
-            # per-option disabled flag).
-            gpu_label = (
-                "Local — NVIDIA GPU (recommended): WhisperX runs on your GPU. "
-                "All data stays on this machine."
-                if hw.has_cuda
-                else "Local — NVIDIA GPU (DISABLED: no GPU detected)"
-            )
-            cpu_label = (
-                "Local — CPU only: slow (~30-60 min per hour of audio), "
-                "but all-local and works on any machine."
-            )
-            remote_label = (
-                "Remote API: any OpenAI-compatible /audio/transcriptions endpoint "
-                "(OpenAI, Groq, self-hosted whisper.cpp). No diarization — both "
-                "tracks transcribe as single speakers. Configure via CLI: "
-                "`transcription config set remote_api_base_url ...`, "
-                "`set remote_api_model ...`, `set-token remote_api`."
-            )
-
-            options = {
-                "local_gpu": gpu_label,
-                "local_cpu": cpu_label,
-                "remote_api": remote_label,
-            }
             default = "local_gpu" if hw.has_cuda else "local_cpu"
-            choice = ui.radio(options, value=default).props("inline=false").classes("w-full")
+            state: dict[str, str] = {"choice": default}
+            rows: dict[str, ui.element] = {}
+
+            def _select(value: str, disabled: bool) -> None:
+                if disabled:
+                    return
+                state["choice"] = value
+                for v, row in rows.items():
+                    if v == value:
+                        row.classes(add="selected")
+                    else:
+                        row.classes(remove="selected")
+
+            def _radio_row(
+                value: str,
+                *,
+                title: str,
+                sub: str,
+                tag: tuple[str, bool] | None = None,
+                disabled: bool = False,
+            ) -> None:
+                klass = "radio-row"
+                if value == state["choice"]:
+                    klass += " selected"
+                if disabled:
+                    klass += " disabled"
+                row = ui.row().classes(klass)
+                row.on("click", lambda _v=value, _d=disabled: _select(_v, _d))
+                with row:
+                    ui.html('<span class="dot"></span>')
+                    with ui.element("div").classes("body-l"):
+                        if tag is not None:
+                            tag_label, tag_warn = tag
+                            tag_class = "tag warn" if tag_warn else "tag"
+                            ui.html(
+                                f'<div class="title-l">{html.escape(title)}'
+                                f'<span class="{tag_class}">{html.escape(tag_label)}</span>'
+                                "</div>"
+                            )
+                        else:
+                            ui.html(f'<div class="title-l">{html.escape(title)}</div>')
+                        ui.html(f'<div class="sub-l">{html.escape(sub)}</div>')
+                rows[value] = row
+
+            with ui.element("div").classes("radio-list w-full"):
+                _radio_row(
+                    "local_gpu",
+                    title="Local — NVIDIA GPU",
+                    sub=(
+                        "WhisperX runs on your GPU. All data stays on this machine."
+                        if hw.has_cuda
+                        else "No CUDA GPU detected. Pick Local CPU instead."
+                    ),
+                    tag=("recommended", False) if hw.has_cuda else ("disabled", True),
+                    disabled=not hw.has_cuda,
+                )
+                _radio_row(
+                    "local_cpu",
+                    title="Local — CPU only",
+                    sub=(
+                        "Slow (~30-60 min per hour of audio), "
+                        "but all-local and works on any machine."
+                    ),
+                )
+                _radio_row(
+                    "remote_api",
+                    title="Remote API",
+                    sub=(
+                        "Any OpenAI-compatible /audio/transcriptions endpoint "
+                        "(OpenAI, Groq, self-hosted whisper.cpp). No diarization — "
+                        "both tracks transcribe as single speakers. Configure via "
+                        "CLI: `transcription config set remote_api_base_url ...`, "
+                        "`set remote_api_model ...`, `set-token remote_api`."
+                    ),
+                )
 
             def _save() -> None:
-                v = choice.value
+                v = state["choice"]
                 if v == "local_gpu" and not hw.has_cuda:
                     ui.notify(
                         "No CUDA GPU detected — pick Local CPU instead.",
