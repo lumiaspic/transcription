@@ -16,9 +16,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from nicegui import ui
+from nicegui import run, ui
 
 from .. import config as cfg
+from ..connectivity import test_huggingface_token, test_remote_connection
 from ..paths import config_file, jobs_db, logs_dir, recordings_dir
 from ..pipeline.hardware import HardwareProbe
 
@@ -349,6 +350,26 @@ def open_settings_dialog() -> None:
                     on_change=lambda e: _apply_preset(e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
+                remote_test_result = ui.label("").classes("wizard-test-result")
+
+                async def _test_remote() -> None:
+                    base = (form.get("remote_api_base_url") or "").strip()
+                    slot = form.get("remote_api_token_service") or "remote_api"
+                    token = cfg.get_token(slot) or ""
+                    if not token:
+                        remote_test_result.text = (
+                            f"No API key stored under '{slot}' — add it in the Tokens tab first."
+                        )
+                        remote_test_result.classes(remove="ok pending", add="error")
+                        return
+                    remote_test_result.text = "Testing…"
+                    remote_test_result.classes(remove="ok error", add="pending")
+                    ok, msg = await run.io_bound(test_remote_connection, base, token)
+                    remote_test_result.text = msg
+                    remote_test_result.classes(remove="pending", add="ok" if ok else "error")
+
+                ui.button("Test connection", on_click=_test_remote).props("outline dense no-caps")
+
                 _section_title("Model")
                 _section_help("Server-side model name, e.g. 'whisper-1' or 'whisper-large-v3'.")
                 ui.input(
@@ -568,6 +589,24 @@ def _render_tokens(container: ui.element, remote_service: str) -> None:
                     f"{'set' if present else 'not set'}</span>"
                 )
                 with ui.row().classes("gap-1 ml-auto"):
+                    if present:
+
+                        async def _test(_e=None, s: str = svc) -> None:
+                            token = cfg.get_token(s) or ""
+                            if s == "huggingface":
+                                ok, msg = await run.io_bound(test_huggingface_token, token)
+                            else:
+                                base = (cfg.load_config().get("remote_api_base_url") or "").strip()
+                                if not base:
+                                    ui.notify(
+                                        "Set the Remote API base URL first (Remote API tab).",
+                                        type="warning",
+                                    )
+                                    return
+                                ok, msg = await run.io_bound(test_remote_connection, base, token)
+                            ui.notify(msg, type="positive" if ok else "negative")
+
+                        ui.button("Test", on_click=_test).props("flat dense no-caps color=primary")
                     ui.button(
                         "Set…" if not present else "Replace…",
                         on_click=lambda _e=None, s=svc, d=desc: _set_token_dialog(

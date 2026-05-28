@@ -1,61 +1,63 @@
 # Installation
 
-- **Windows** → [`install.ps1`](#windows) (PowerShell, Desktop shortcut)
+- **Windows** → [one-click `.bat`](#windows) (recommended) or `install.ps1`
 - **macOS** → [`install.sh`](#macos) (Bash, launcher script)
 
 ---
 
 ## Windows
 
-This isn't a `.exe` installer — it's a one-shot PowerShell script that
-clones the repo, installs `uv` and `git` if missing, provisions the
-Python environment with all CUDA wheels, and drops a Desktop shortcut.
-It works on both a GPU-equipped gaming PC and a CPU-only work PC; the
-first-run wizard picks the right backend mode.
+There's no `.exe` installer. Instead, a one-shot script installs `uv` and
+`git` if missing, downloads the app, provisions the Python environment
+with all CUDA wheels, and drops a Desktop shortcut with the app logo. It
+works on both a GPU-equipped gaming PC and a CPU-only work PC; the
+first-run wizard picks the right backend mode and walks you through the
+token setup.
 
-### Install (5–10 min on a fresh machine)
+### Easy install (recommended — no command line)
 
-1. **Get `install.ps1` onto the machine.** The repository is private,
-   so the standard `irm | iex` one-liner won't work without auth — the
-   easiest path is to download the script manually:
-   - Open <https://github.com/lumiaspic/transcription/blob/main/packaging/install.ps1>
-     in a browser that's signed in to GitHub.
-   - Click **Raw** → right-click → **Save as…** → save as `install.ps1`.
+1. Download **`Install-Transcription.bat`**:
+   - Open <https://github.com/lumiaspic/transcription/blob/main/packaging/Install-Transcription.bat>
+   - Click the download icon (top-right of the file view) to save it.
+2. **Double-click** the downloaded `Install-Transcription.bat`.
+   - Windows SmartScreen may warn about an unknown script → click
+     **More info → Run anyway** (it just runs the public installer below).
+   - Keep the window open until it says **Done** (5–10 min the first time —
+     it downloads ~3 GB of PyTorch / CUDA wheels).
+3. Launch from the **`Transcription`** shortcut on your Desktop. The
+   first-run wizard appears: pick the backend mode and, if needed, paste
+   your token — the wizard links you straight to the page to get it.
 
-2. **Open PowerShell** in the directory where you saved it.
+That's it. If anything fails, just double-click the `.bat` again — it
+resumes where it stopped.
 
-3. **Allow script execution for this session** (Windows blocks
-   unsigned downloaded scripts by default):
-   ```powershell
-   Set-ExecutionPolicy -Scope Process Bypass
-   ```
+### Manual install (PowerShell)
 
-4. **Run the installer:**
-   ```powershell
-   .\install.ps1
-   ```
+If you'd rather run it yourself:
 
-   - If `git` is missing, it installs Git for Windows via `winget`.
-   - If `uv` is missing, it installs uv via Astral's official installer.
-   - On the first `git clone` of a private repo, Git Credential Manager
-     pops a browser tab — sign in to GitHub once and you're done.
-   - `uv sync --extra transcribe` downloads ~3 GB of PyTorch / CUDA
-     wheels. This is the slow step.
+```powershell
+irm https://raw.githubusercontent.com/lumiaspic/transcription/main/packaging/install.ps1 | iex
+```
 
-5. **Set your HuggingFace token** (one-time, enables speaker
-   diarization on the system track):
-   ```powershell
-   cd $env:LOCALAPPDATA\Programs\transcription
-   uv run transcription config set-token huggingface
-   ```
-   You also need to accept the licence on
-   <https://huggingface.co/pyannote/speaker-diarization-community-1>
-   if you haven't already.
+Or download [`install.ps1`](https://github.com/lumiaspic/transcription/blob/main/packaging/install.ps1)
+and run `.\install.ps1` (add `Set-ExecutionPolicy -Scope Process Bypass`
+first if Windows blocks the downloaded script).
 
-6. **Launch.** Double-click the `Transcription` shortcut on your Desktop
-   (also in the Start Menu). The first-run wizard appears and asks
-   which backend mode to use — pick GPU on the gaming PC, CPU on the
-   work PC.
+- If `git` is missing, it installs Git for Windows via `winget`.
+- If `uv` is missing, it installs uv via Astral's official installer.
+- `uv sync --extra transcribe` downloads ~3 GB of PyTorch / CUDA wheels.
+  This is the slow step.
+
+The HuggingFace token (for speaker diarization) is best set from the
+first-run wizard in the GUI. If you prefer the command line:
+
+```powershell
+cd $env:LOCALAPPDATA\Programs\transcription
+uv run transcription config set-token huggingface
+```
+
+You also need to accept the licence on
+<https://huggingface.co/pyannote/speaker-diarization-community-1>.
 
 ### Update
 
