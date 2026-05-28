@@ -127,8 +127,7 @@ if (Test-Path "$InstallDir\.git") {
         throw "$InstallDir exists and is not empty. Remove it manually or pass -InstallDir <other-path>."
     }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $InstallDir) | Out-Null
-    Note "First time on this machine. If the repo is private, a browser will open"
-    Note "for GitHub authentication (Git Credential Manager)."
+    Note "First time on this machine. Cloning the public repository..."
     Invoke-Native { git clone --branch $Branch $RepoUrl $InstallDir } "git clone"
     Done "Cloned at $(git -C $InstallDir rev-parse --short HEAD)"
 }
@@ -179,6 +178,12 @@ if (-not (Test-Path $launcher)) {
     throw "Launcher missing at $launcher (repo layout changed?)"
 }
 
+$iconPath = "$InstallDir\src\transcription\ui\static\app.ico"
+if (-not (Test-Path $iconPath)) {
+    # Fall back to the shell32 microphone icon if the bundled icon is missing.
+    $iconPath = "$env:WINDIR\System32\shell32.dll,138"
+}
+
 $ws = New-Object -ComObject WScript.Shell
 $targets = @(
     "$([Environment]::GetFolderPath('Desktop'))\Transcription.lnk",
@@ -189,8 +194,9 @@ foreach ($lnkPath in $targets) {
     $shortcut.TargetPath = "wscript.exe"
     $shortcut.Arguments = "`"$launcher`""
     $shortcut.WorkingDirectory = $InstallDir
-    # System microphone icon from shell32.dll
-    $shortcut.IconLocation = "$env:WINDIR\System32\shell32.dll,138"
+    $shortcut.IconLocation = $iconPath
+    # Must match SetCurrentProcessExplicitAppUserModelID in app.run_gui so the
+    # taskbar button inherits this shortcut's icon instead of pythonw's.
     $shortcut.Description = "Local audio capture + WhisperX transcription"
     $shortcut.Save()
     Done $lnkPath
@@ -202,13 +208,15 @@ Step "Done"
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host ""
-Write-Host "  1. (Once per machine) Set your HuggingFace token to enable"
-Write-Host "     speaker diarization on the system track:"
+Write-Host "  1. Launch via the 'Transcription' shortcut on your Desktop, or:"
+Write-Host "         uv run --extra transcribe transcription gui"
+Write-Host ""
+Write-Host "     The first-run wizard picks the backend and walks you through"
+Write-Host "     the token setup (HuggingFace for diarization, or your API key)."
+Write-Host ""
+Write-Host "  2. Prefer the command line for the HuggingFace token?"
 Write-Host "         cd `"$InstallDir`""
 Write-Host "         uv run transcription config set-token huggingface"
-Write-Host ""
-Write-Host "  2. Launch via the 'Transcription' shortcut on your Desktop, or:"
-Write-Host "         uv run --extra transcribe transcription gui"
 Write-Host ""
 Write-Host "  Update later  : packaging\update.ps1"
 Write-Host "  Uninstall     : packaging\uninstall.ps1"
