@@ -96,12 +96,14 @@ def _confirm_reload(message: str) -> None:
     with ui.dialog() as d, ui.card().classes("min-w-[420px] gap-3"):
         ui.label("Reload required").classes("dlg-title")
         ui.label(message).classes("dlg-sub")
+
+        def _reload() -> None:
+            d.close()
+            ui.navigate.reload()
+
         with ui.row().classes("justify-end gap-2 w-full"):
             ui.button("Later", on_click=d.close).props("flat no-caps color=primary")
-            ui.button(
-                "Reload now",
-                on_click=lambda: (d.close(), ui.navigate.reload()),
-            ).props("color=primary unelevated no-caps")
+            ui.button("Reload now", on_click=_reload).props("color=primary unelevated no-caps")
     d.open()
 
 
@@ -536,17 +538,18 @@ def _render_tokens(container: ui.element, remote_service: str) -> None:
                         ),
                     ).props("flat dense no-caps color=primary")
                     if present:
-                        ui.button(
-                            "Remove",
-                            on_click=lambda _e=None, s=svc: (
-                                cfg.remove_token(s),
-                                ui.notify(f"Removed token for '{s}'.", type="warning"),
-                                _render_tokens(container, remote_service),
-                            ),
-                        ).props("flat dense no-caps color=negative")
+
+                        def _remove(_e=None, s: str = svc) -> None:
+                            cfg.remove_token(s)
+                            ui.notify(f"Removed token for '{s}'.", type="warning")
+                            _render_tokens(container, remote_service)
+
+                        ui.button("Remove", on_click=_remove).props(
+                            "flat dense no-caps color=negative"
+                        )
 
 
-def _reset_field(form: dict[str, Any], widget: ui.element, key: str, value: Any) -> None:
+def _reset_field(form: dict[str, Any], widget: Any, key: str, value: Any) -> None:
     form[key] = value
     widget.value = value
     widget.update()
