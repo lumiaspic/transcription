@@ -111,6 +111,27 @@ class TestMaybeCompressForUpload:
         assert len(fake_ffmpeg["calls"]) == 1
 
 
+class TestEdgeCases:
+    def test_missing_source_file_returns_path_unchanged(self, tmp_path: Path) -> None:
+        # stat() raises OSError on a path that doesn't exist — fall through
+        # rather than crash, and let the upload itself produce the real error.
+        missing = tmp_path / "vanished.flac"
+
+        assert maybe_compress_for_upload(missing, max_mb=20) == missing
+
+    def test_non_opus_codec_passes_through_encoder_name(
+        self, tmp_path: Path, fake_ffmpeg: dict[str, Any]
+    ) -> None:
+        # Only "opus" gets remapped to "libopus"; other codecs are passed
+        # to ffmpeg verbatim so users can pick e.g. mp3 without surprise.
+        src = _write_file(tmp_path / "mic.flac", size_mb=30)
+
+        maybe_compress_for_upload(src, max_mb=20, codec="mp3", bitrate="32k")
+
+        cmd = fake_ffmpeg["calls"][0]
+        assert cmd[cmd.index("-c:a") + 1] == "mp3"
+
+
 class TestCompressToOpus:
     def test_raises_compression_error_when_ffmpeg_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
