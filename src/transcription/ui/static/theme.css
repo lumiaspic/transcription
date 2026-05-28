@@ -88,25 +88,30 @@ body, .q-page, .nicegui-content {
 }
 
 .brand-lockup {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   font-family: var(--font-sans);
   font-weight: 700;
   font-size: 20px;
   letter-spacing: -0.01em;
   color: var(--ink-1);
-  padding-right: 8px;
+  line-height: 1;
 }
 .brand-lockup .brand-mark {
   width: 32px;
   height: 32px;
   border-radius: 7px;
-  display: inline-block;
+  display: block;
   flex-shrink: 0;
 }
 .brand-lockup span {
-  line-height: 1;
+  display: inline-block;
+  /* Optical nudge: with default text metrics the glyph's visual middle
+     sits a hair below the geometric center of its line box, so the
+     mark reads as slightly low next to it. Lift the wordmark by 1px to
+     re-center against the 32px square. */
+  transform: translateY(-1px);
 }
 
 .worker-status {
