@@ -12,6 +12,8 @@ from __future__ import annotations
 import datetime as dt
 import re
 
+from ..i18n import month_abbr, t, weekday_abbr
+
 _REC_ID_RE = re.compile(r"^(\d{8})_(\d{6})$")
 
 
@@ -80,35 +82,36 @@ def humanize_recording_id(rec_id: str, *, now: dt.datetime | None = None) -> str
     delta_days = (today - parsed.date()).days
     time_str = parsed.strftime("%H:%M")
     if delta_days == 0:
-        return f"Today at {time_str}"
+        return t("date.today", time=time_str)
     if delta_days == 1:
-        return f"Yesterday at {time_str}"
+        return t("date.yesterday", time=time_str)
     if 2 <= delta_days <= 6:
-        return f"{parsed.strftime('%a')} at {time_str}"
+        return t("date.weekday", wd=weekday_abbr(parsed.weekday()), time=time_str)
+    mon = month_abbr(parsed.month)
     if parsed.year == today.year:
-        return f"{parsed.strftime('%b')} {parsed.day} at {time_str}"
-    return f"{parsed.strftime('%b')} {parsed.day}, {parsed.year} at {time_str}"
+        return t("date.same_year", mon=mon, day=parsed.day, time=time_str)
+    return t("date.other_year", mon=mon, day=parsed.day, year=parsed.year, time=time_str)
 
 
-# Patterns mapped to short user-facing labels. The full traceback stays
-# available in the dialog — this is just for the cell preview.
+# Patterns mapped to translation keys. The full traceback stays available in
+# the dialog — this is just for the cell preview.
 _ERROR_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"CUDA out of memory", re.I), "Graphics card memory exhausted"),
-    (re.compile(r"out of memory", re.I), "Out of memory"),
-    (re.compile(r"FileNotFoundError|No such file", re.I), "File not found"),
-    (re.compile(r"PermissionError|Permission denied", re.I), "Permission denied"),
+    (re.compile(r"CUDA out of memory", re.I), "err.cuda_oom"),
+    (re.compile(r"out of memory", re.I), "err.oom"),
+    (re.compile(r"FileNotFoundError|No such file", re.I), "err.file_not_found"),
+    (re.compile(r"PermissionError|Permission denied", re.I), "err.permission"),
     (
         re.compile(r"ConnectionError|Connection refused|Failed to establish", re.I),
-        "Could not reach the server",
+        "err.connection",
     ),
-    (re.compile(r"Timeout|timed out", re.I), "Request timed out"),
-    (re.compile(r"401|Unauthorized|Invalid API key", re.I), "Invalid API key"),
-    (re.compile(r"403|Forbidden", re.I), "Access forbidden by the server"),
-    (re.compile(r"429|rate limit", re.I), "Rate limit reached — try again later"),
-    (re.compile(r"5\d\d\b|Internal Server Error|Bad Gateway", re.I), "Remote server error"),
-    (re.compile(r"ffmpeg", re.I), "Audio conversion failed"),
-    (re.compile(r"diariz", re.I), "Speaker diarization failed"),
-    (re.compile(r"CUDA|cuDNN|cublas", re.I), "GPU error"),
+    (re.compile(r"Timeout|timed out", re.I), "err.timeout"),
+    (re.compile(r"401|Unauthorized|Invalid API key", re.I), "err.unauthorized"),
+    (re.compile(r"403|Forbidden", re.I), "err.forbidden"),
+    (re.compile(r"429|rate limit", re.I), "err.rate_limit"),
+    (re.compile(r"5\d\d\b|Internal Server Error|Bad Gateway", re.I), "err.server"),
+    (re.compile(r"ffmpeg", re.I), "err.ffmpeg"),
+    (re.compile(r"diariz", re.I), "err.diarize"),
+    (re.compile(r"CUDA|cuDNN|cublas", re.I), "err.gpu"),
 )
 
 
@@ -119,9 +122,9 @@ def humanize_error(err_text: str | None) -> str:
     """
     if not err_text:
         return ""
-    for pattern, label in _ERROR_PATTERNS:
+    for pattern, key in _ERROR_PATTERNS:
         if pattern.search(err_text):
-            return label
+            return t(key)
     # Fallback: first non-empty line, trimmed.
     for raw in err_text.splitlines():
         line = raw.strip()
