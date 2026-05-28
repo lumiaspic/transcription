@@ -23,6 +23,7 @@ from .. import config as cfg
 from ..audio.devices import SystemLoopbackUnavailable
 from ..paths import recordings_dir
 from ..pipeline.hardware import HardwareProbe
+from .settings import open_settings_dialog
 from .state import STATE
 
 log = logging.getLogger(__name__)
@@ -184,22 +185,30 @@ def _show_job_error(job_id: int) -> None:
 # ---------- layout ----------
 
 
-def _build_ui() -> None:
-    # --- header ---
+def _build_header(*, show_worker: bool = True) -> None:
     with ui.header(elevated=True).classes("items-center justify-between"):
         with ui.element("div").classes("brand-lockup"):
             ui.html(
                 '<img src="/static/mark.svg" alt="" class="brand-mark"/><span>Transcription</span>'
             )
-        with ui.element("div").classes("worker-status"):
-            ui.label("Worker")
-            worker_dot = ui.icon("circle").classes("text-base")
+        with ui.row().classes("items-center gap-3"):
+            if show_worker:
+                with ui.element("div").classes("worker-status"):
+                    ui.label("Worker")
+                    worker_dot = ui.icon("circle").classes("text-base")
 
-            def _update_dot() -> None:
-                worker_dot.props(f"color={'positive' if STATE.worker_alive() else 'grey'}")
+                    def _update_dot() -> None:
+                        worker_dot.props(f"color={'positive' if STATE.worker_alive() else 'grey'}")
 
-            _update_dot()
-            ui.timer(2.0, _update_dot)
+                    _update_dot()
+                    ui.timer(2.0, _update_dot)
+            ui.button(icon="settings", on_click=open_settings_dialog).props(
+                "flat round dense color=primary"
+            ).tooltip("Settings")
+
+
+def _build_ui() -> None:
+    _build_header(show_worker=True)
 
     # --- main column ---
     with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
@@ -414,11 +423,13 @@ def _build_wizard() -> None:
     """
     hw = HardwareProbe.detect()
 
+    _build_header(show_worker=False)
+
     with ui.column().classes("w-full max-w-2xl mx-auto p-6 gap-4"):
         ui.label("Welcome").classes("wizard-hero")
         ui.label(
             "First-run setup. Pick how transcription should run on this machine. "
-            "You can change this later via `transcription config set backend_mode <mode>`."
+            "You can change this later from the Settings menu."
         ).classes("wizard-lead")
 
         # Detected hardware
@@ -508,9 +519,8 @@ def _build_wizard() -> None:
                     sub=(
                         "Any OpenAI-compatible /audio/transcriptions endpoint "
                         "(OpenAI, Groq, self-hosted whisper.cpp). No diarization — "
-                        "both tracks transcribe as single speakers. Configure via "
-                        "CLI: `transcription config set remote_api_base_url ...`, "
-                        "`set remote_api_model ...`, `set-token remote_api`."
+                        "both tracks transcribe as single speakers. Configure the "
+                        "endpoint and API key from Settings → Remote API after this step."
                     ),
                 )
 
