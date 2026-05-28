@@ -217,10 +217,16 @@ def _show_job_error(job_id: int) -> None:
 
 def _build_header(*, show_worker: bool = True) -> None:
     with ui.header(elevated=True).classes("items-center justify-between"):
-        with ui.element("div").classes("brand-lockup"):
-            ui.html(
-                '<img src="/static/mark.svg" alt="" class="brand-mark"/><span>Transcription</span>'
-            )
+        # Inject the whole lockup in one ui.html block so the <img> and
+        # <span> end up as direct children of .brand-lockup (and therefore
+        # direct flex items). Nesting them inside ui.element + a separate
+        # ui.html introduces an extra wrapper div that breaks the row.
+        ui.html(
+            '<div class="brand-lockup">'
+            '<img src="/static/mark.svg" alt="" class="brand-mark"/>'
+            "<span>Transcription</span>"
+            "</div>"
+        )
         with ui.row().classes("items-center gap-3"):
             if show_worker:
                 worker_wrap = ui.element("div").classes("worker-status")
