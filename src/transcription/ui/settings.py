@@ -33,6 +33,40 @@ RECORDING_FORMATS = ["flac", "wav"]
 SAMPLE_RATES = [16000, 22050, 44100, 48000]
 COMPRESS_CODECS = ["opus", "mp3"]
 
+# Subset of ISO 639-1 codes Whisper handles well. Order: "auto" first, then
+# the rest alphabetical by language name. The empty-string code maps to
+# auto-detection in the config layer.
+LANGUAGE_OPTIONS: dict[str, str] = {
+    "": "Auto-detect",
+    "ar": "Arabic",
+    "zh": "Chinese",
+    "cs": "Czech",
+    "da": "Danish",
+    "nl": "Dutch",
+    "en": "English",
+    "fi": "Finnish",
+    "fr": "French",
+    "de": "German",
+    "el": "Greek",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "hu": "Hungarian",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "no": "Norwegian",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "es": "Spanish",
+    "sv": "Swedish",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "vi": "Vietnamese",
+}
+
 
 # Common OpenAI-compatible endpoints — drop-down presets that just prefill
 # the base URL field. User can still type anything.
@@ -180,13 +214,17 @@ def open_settings_dialog() -> None:
 
                 _section_title("Language")
                 _section_help(
-                    "ISO 639-1 code (e.g. 'fr', 'en'). Leave blank for "
-                    "auto-detection on each track."
+                    "Pick the spoken language to transcribe. 'Auto-detect' lets "
+                    "the model decide on each track."
                 )
-                ui.input(
-                    placeholder="auto",
-                    value=form["language"],
-                    on_change=lambda e: form.update(language=e.value),
+                # Normalize the stored value: anything not in the known
+                # list (custom code, blank, None) falls back to "" (Auto).
+                lang_initial = form["language"] if form["language"] in LANGUAGE_OPTIONS else ""
+                ui.select(
+                    LANGUAGE_OPTIONS,
+                    value=lang_initial,
+                    with_input=True,
+                    on_change=lambda e: form.update(language=e.value or ""),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
             # ---------- Recording ----------
@@ -442,8 +480,7 @@ def open_settings_dialog() -> None:
                 ).props("flat dense no-caps color=primary")
 
         # Footer
-        with ui.row().classes("settings-footer items-center justify-between w-full"):
-            ui.label(str(config_file())).classes("settings-path")
+        with ui.row().classes("settings-footer items-center justify-end w-full"):
             with ui.row().classes("gap-2"):
                 ui.button("Cancel", on_click=dialog.close).props("flat no-caps color=primary")
                 ui.button(
