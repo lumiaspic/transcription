@@ -6,7 +6,8 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ..backends.base import TranscriptResult
+from ..backends.base import Segment, TranscriptResult
+from ..pipeline.speakers import SpeakerProfile
 
 
 def to_txt(result: TranscriptResult, path: Path) -> None:
@@ -46,6 +47,32 @@ def to_json(result: TranscriptResult, path: Path) -> None:
         "meta": result.meta,
     }
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def load_json(path: Path) -> TranscriptResult:
+    """Reconstruct a TranscriptResult from a per-track `.json` written by
+    `to_json`. Used by `run_transcription`'s resume path so a partially
+    completed recording doesn't redo work after a crash or quota error."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    segments = [
+        Segment(
+            start=float(s.get("start", 0.0)),
+            end=float(s.get("end", 0.0)),
+            text=str(s.get("text", "")),
+            speaker=s.get("speaker"),
+        )
+        for s in data.get("segments", [])
+    ]
+    return TranscriptResult(
+        language=str(data.get("language", "unknown")),
+        segments=segments,
+        duration=float(data.get("duration", 0.0)),
+        backend=str(data.get("backend", "unknown")),
+        model=str(data.get("model", "unknown")),
+        profile=SpeakerProfile(data.get("profile", SpeakerProfile.SOLO.value)),
+        track=str(data.get("track", "")),
+        meta=dict(data.get("meta", {})),
+    )
 
 
 def write_all(result: TranscriptResult, dir_path: Path, stem: str) -> dict[str, Path]:

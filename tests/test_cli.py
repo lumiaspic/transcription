@@ -261,7 +261,7 @@ class TestTranscribe:
         (rec_dir / "mic.flac").write_bytes(b"")
 
         fake = FakeBackend()
-        monkeypatch.setattr(cli_mod, "get_backend", lambda model=None: fake)
+        monkeypatch.setattr(cli_mod, "get_backend_chain", lambda model=None: [fake])
 
         result = runner.invoke(app, ["transcribe", rec_id])
 

@@ -182,7 +182,9 @@ class TestConstruction:
         backend = RemoteOpenAICompatBackend()
 
         assert isinstance(backend, TranscriptionBackend)
-        assert backend.name == "remote_openai_compat"
+        # `name` is the chain identifier (default "remote_api") so the merged
+        # transcript can attribute each track to a specific chain entry.
+        assert backend.name == "remote_api"
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +276,7 @@ class TestTranscribeHappyPath:
         # Parsed result
         assert result.language == "fr"
         assert result.duration == 5.0
-        assert result.backend == "remote_openai_compat"
+        assert result.backend == "remote_api"
         assert result.model == "whisper-large-v3"
         assert result.profile == SpeakerProfile.SOLO
         assert [s.text for s in result.segments] == ["Bonjour.", "Comment ça va ?"]

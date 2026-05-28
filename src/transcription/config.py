@@ -60,6 +60,26 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "remote_api_model": None,
     "remote_api_token_service": "remote_api",
     "remote_api_timeout_seconds": 600,
+    # Upload pre-compression. Set to a number of MB above which the remote
+    # backend re-encodes the source to mono Opus before upload. 20 MB leaves
+    # headroom under the common 25 MB provider cap. Set to a very large
+    # number to disable.
+    "remote_api_max_upload_mb": 20,
+    "remote_api_compress_codec": "opus",
+    "remote_api_compress_bitrate": "16k",
+    # Fallback chain. List of backend identifiers tried in order: on a
+    # recoverable error (quota / rate-limit / payload-too-large) the next
+    # entry is tried for the *current track only*. Entries can be the
+    # built-in modes ("local_gpu", "local_cpu", "remote_api") or a custom
+    # name pointing at a [backends.NAME] table — see resolve_remote_backend_config.
+    # When unset, falls back to [backend_mode] (single-entry chain == old behavior).
+    "backend_fallback_chain": None,
+    # Optional nested config for named remote backends:
+    #   [backends.openai_fallback]
+    #   base_url = "https://api.openai.com/v1"
+    #   model = "whisper-1"
+    #   token_service = "openai_api"
+    "backends": {},
 }
 
 
@@ -87,6 +107,41 @@ def set_config_key(key: str, value: Any) -> None:
     cfg = load_config()
     cfg[key] = value
     save_config(cfg)
+
+
+def resolve_remote_backend_config(name: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Look up a remote backend's settings by chain identifier.
+
+    Two layouts coexist for backwards compatibility:
+      - Flat keys `remote_api_*` (the original single-backend layout).
+        Used when `name == "remote_api"` and no nested entry shadows them.
+      - Nested `[backends.NAME]` table with `base_url` / `model` /
+        `token_service` / `timeout_seconds`. The nested entry wins when both
+        are present, which lets a user gradually migrate.
+
+    For a custom name like "openai_fallback", `token_service` defaults to the
+    name itself so each provider can keep its own key in the OS keyring
+    without extra configuration.
+    """
+    backends = cfg.get("backends") or {}
+    entry = backends.get(name) or {}
+    if name == "remote_api":
+        return {
+            "base_url": entry.get("base_url") or cfg.get("remote_api_base_url"),
+            "model": entry.get("model") or cfg.get("remote_api_model"),
+            "token_service": entry.get("token_service")
+            or cfg.get("remote_api_token_service")
+            or "remote_api",
+            "timeout_seconds": entry.get("timeout_seconds")
+            or cfg.get("remote_api_timeout_seconds")
+            or 600,
+        }
+    return {
+        "base_url": entry.get("base_url"),
+        "model": entry.get("model"),
+        "token_service": entry.get("token_service") or name,
+        "timeout_seconds": entry.get("timeout_seconds") or 600,
+    }
 
 
 # ---------- Token secrets (keyring) ----------

@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from ..backends.base import TranscriptionBackend
-from ..backends.factory import get_backend
+from ..backends.factory import get_backend_chain
 from .jobs import Job, JobQueue
 from .transcribe import run_transcription
 
@@ -28,7 +28,8 @@ class Worker:
         self.queue = queue or JobQueue()
         self.poll_interval = poll_interval
         # Keyed by model name (None means "use config default", kept distinct as well).
-        self._backends: dict[str, TranscriptionBackend] = {}
+        # Each cache entry is the full fallback chain for that model.
+        self._backends: dict[str, list[TranscriptionBackend]] = {}
 
     # ---------- public API ----------
 
@@ -49,11 +50,15 @@ class Worker:
 
     # ---------- internals ----------
 
-    def _get_backend(self, model: str | None) -> TranscriptionBackend:
+    def _get_backend_chain(self, model: str | None) -> list[TranscriptionBackend]:
         key = model or "__config_default__"
         if key not in self._backends:
-            log.info("Loading backend (model=%s)", model or "config default")
-            self._backends[key] = get_backend(model=model)
+            log.info("Loading backend chain (model=%s)", model or "config default")
+            self._backends[key] = get_backend_chain(model=model)
+            log.info(
+                "Chain: %s",
+                ", ".join(b.name for b in self._backends[key]),
+            )
         return self._backends[key]
 
     def _execute(self, job: Job) -> None:
@@ -65,10 +70,10 @@ class Worker:
             job.diarize,
         )
         try:
-            backend = self._get_backend(job.model)
+            backends = self._get_backend_chain(job.model)
             run_transcription(
                 rec_dir=Path(job.recording_dir),
-                backend=backend,
+                backend=backends,
                 language=job.language,
                 diarize=job.diarize,
                 progress=lambda msg: log.info("  %s", msg),
