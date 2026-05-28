@@ -23,6 +23,7 @@ from .. import config as cfg
 from ..audio.devices import SystemLoopbackUnavailable
 from ..paths import recordings_dir
 from ..pipeline.hardware import HardwareProbe
+from .humanize import format_duration, humanize_error, humanize_recording_id
 from .settings import open_settings_dialog
 from .state import STATE
 
@@ -71,6 +72,35 @@ _STATUS_ICONS = {
     "done": "check_circle",
     "failed": "error",
 }
+
+_STATUS_LABELS = {
+    "pending": "Waiting",
+    "running": "Processing",
+    "done": "Done",
+    "failed": "Failed",
+}
+
+_STATUS_TOOLTIPS = {
+    "pending": "Queued — waiting for the background service to pick it up.",
+    "running": "Currently being transcribed.",
+    "done": "Transcription finished. Click the row to open the folder.",
+    "failed": "Transcription failed. Click the row for details.",
+}
+
+
+def _humanize_iso_timestamp(iso: str | None) -> str:
+    """Render an ISO 8601 timestamp as `humanize_recording_id` does.
+
+    The jobs table stores creation as ISO; this maps it back to the same
+    'Today at HH:MM' style used for recording IDs so both columns agree.
+    """
+    if not iso:
+        return ""
+    try:
+        d = dt.datetime.fromisoformat(iso)
+    except ValueError:
+        return iso
+    return humanize_recording_id(d.strftime("%Y%m%d_%H%M%S"))
 
 
 # Floor for the dB readout — peaks below this read as silent. Keeps the meter
@@ -193,12 +223,19 @@ def _build_header(*, show_worker: bool = True) -> None:
             )
         with ui.row().classes("items-center gap-3"):
             if show_worker:
-                with ui.element("div").classes("worker-status"):
-                    ui.label("Worker")
+                worker_wrap = ui.element("div").classes("worker-status")
+                with worker_wrap:
+                    ui.label("Background service")
                     worker_dot = ui.icon("circle").classes("text-base")
 
                     def _update_dot() -> None:
-                        worker_dot.props(f"color={'positive' if STATE.worker_alive() else 'grey'}")
+                        alive = STATE.worker_alive()
+                        worker_dot.props(f"color={'positive' if alive else 'grey'}")
+                        worker_wrap.tooltip(
+                            "Background service is running — new recordings will be transcribed automatically."
+                            if alive
+                            else "Background service is not running. Restart the app to recover."
+                        )
 
                     _update_dot()
                     ui.timer(2.0, _update_dot)
@@ -234,7 +271,11 @@ def _build_ui() -> None:
                     "■ Stop",
                     on_click=_stop_recording_and_enqueue,
                 ).props("color=negative size=lg unelevated")
-                elapsed_label = ui.label("—").classes("rec-timer ml-auto")
+                elapsed_label = (
+                    ui.label("Ready")
+                    .classes("rec-timer ml-auto")
+                    .tooltip("Press Start to begin a new recording.")
+                )
 
             # Live peak meters — visible only while recording. Two rows of
             # [LABEL | track | dB] using the design-system MIC/SYSTEM palette.
@@ -269,7 +310,7 @@ def _build_ui() -> None:
                     mic_db.text = _peak_to_db_text(mic_peak)
                     sys_db.text = _peak_to_db_text(sys_peak)
                 else:
-                    elapsed_label.text = "—"
+                    elapsed_label.text = "Ready"
                     elapsed_label.classes(remove="active")
                     rec_dot.visible = False
                     track_legend.visible = False
@@ -286,25 +327,26 @@ def _build_ui() -> None:
         # --- Jobs card ---
         with ui.card().classes("w-full"):
             with ui.row().classes("items-center justify-between w-full"):
-                ui.label("Jobs queue").classes("card-title")
-                ui.label(f"{STATE.queue.db_path}").classes("card-aside")
+                ui.label("Jobs queue").classes("card-title").tooltip(
+                    "Transcription work currently running, queued, or recently finished."
+                )
             jobs_table = ui.table(
                 columns=[
                     {"name": "id", "label": "#", "field": "id", "align": "right"},
                     {
                         "name": "recording_id",
                         "label": "Recording",
-                        "field": "recording_id",
+                        "field": "recording_id_display",
                         "align": "left",
                     },
                     {"name": "status", "label": "Status", "field": "status", "align": "left"},
                     {
                         "name": "created_at",
                         "label": "Created",
-                        "field": "created_at",
+                        "field": "created_at_display",
                         "align": "left",
                     },
-                    {"name": "error", "label": "Error", "field": "error", "align": "left"},
+                    {"name": "error", "label": "Error", "field": "error_display", "align": "left"},
                 ],
                 rows=[],
                 row_key="id",
@@ -315,21 +357,43 @@ def _build_ui() -> None:
                 "body-cell-status",
                 """
                 <q-td :props="props">
-                  <span :class="'badge ' + props.row.status">
+                  <span :class="'badge ' + props.row.status" :title="props.row.status_tip">
                     <q-icon :name="props.row.status_icon" size="13px"></q-icon>
-                    {{ props.row.status }}
+                    {{ props.row.status_label }}
                   </span>
                 </q-td>
                 """,
             )
-            # Only the Error column wraps long messages — every other column
-            # holds compact mono content (IDs, timestamps) and should stay on
-            # one line. See `.cell-wrap` in theme.css.
+            # Recording column shows the friendly label but keeps the raw ID
+            # as a tooltip — power users can still copy it.
+            jobs_table.add_slot(
+                "body-cell-recording_id",
+                """
+                <q-td :props="props" :title="props.row.recording_id">
+                  {{ props.row.recording_id_display }}
+                </q-td>
+                """,
+            )
+            # Created column likewise: humanized text with the ISO timestamp on hover.
+            jobs_table.add_slot(
+                "body-cell-created_at",
+                """
+                <q-td :props="props" :title="props.row.created_at">
+                  {{ props.row.created_at_display }}
+                </q-td>
+                """,
+            )
+            # Error column: short human label with a chevron affording an expand.
+            # Full traceback is in the dialog triggered by row click.
             jobs_table.add_slot(
                 "body-cell-error",
                 """
                 <q-td :props="props" class="cell-wrap">
-                  {{ props.row.error }}
+                  <span v-if="props.row.error_display" class="err-cell" :title="props.row.error_full">
+                    <q-icon name="error_outline" size="14px" class="err-icon"></q-icon>
+                    <span class="err-text">{{ props.row.error_display }}</span>
+                    <q-icon name="chevron_right" size="14px" class="err-chev"></q-icon>
+                  </span>
                 </q-td>
                 """,
             )
@@ -339,14 +403,20 @@ def _build_ui() -> None:
             def _refresh_jobs() -> None:
                 rows = []
                 for j in STATE.queue.list_jobs(limit=20):
+                    err_full = j.error or ""
                     rows.append(
                         {
                             "id": j.id,
                             "recording_id": j.recording_id,
+                            "recording_id_display": humanize_recording_id(j.recording_id),
                             "status": j.status,
+                            "status_label": _STATUS_LABELS.get(j.status, j.status),
+                            "status_tip": _STATUS_TOOLTIPS.get(j.status, ""),
                             "status_icon": _STATUS_ICONS.get(j.status, "schedule"),
                             "created_at": j.created_at,
-                            "error": (j.error or "")[:80],
+                            "created_at_display": _humanize_iso_timestamp(j.created_at),
+                            "error_display": humanize_error(err_full),
+                            "error_full": err_full,
                         }
                     )
                 jobs_table.rows = rows
@@ -357,7 +427,9 @@ def _build_ui() -> None:
 
         # --- Recordings card ---
         with ui.card().classes("w-full"):
-            ui.label("Recordings (recent)").classes("card-title")
+            ui.label("Recordings (recent)").classes("card-title").tooltip(
+                "Audio files captured on this machine. Click 'Show in folder' to open the file location."
+            )
             recs_container = ui.column().classes("w-full gap-0")
 
             def _refresh_recs() -> None:
@@ -370,7 +442,9 @@ def _build_ui() -> None:
                 with recs_container:
                     if not items:
                         ui.html(
-                            '<div class="rec-row"><span class="empty">No recordings yet.</span></div>'
+                            '<div class="rec-row">'
+                            '<span class="empty">No recordings yet — press Start above to make one.</span>'
+                            "</div>"
                         )
                         return
                     for d in items:
@@ -378,15 +452,25 @@ def _build_ui() -> None:
                         done = meta.get("transcribed", False)
                         icon = "check_circle" if done else "schedule"
                         color = "text-green-600" if done else "text-gray-400"
-                        dur = meta.get("duration_seconds", "?")
+                        icon_tip = (
+                            "Transcribed — folder contains text and subtitles."
+                            if done
+                            else "Audio captured, transcription pending."
+                        )
+                        dur = format_duration(meta.get("duration_seconds"))
                         with ui.row().classes("rec-row w-full"):
-                            ui.icon(icon).classes(color)
-                            ui.label(f"{d.name}").classes("rec-id")
-                            ui.label(f"{dur}s").classes("rec-dur")
+                            ui.icon(icon).classes(color).tooltip(icon_tip)
+                            ui.label(humanize_recording_id(d.name)).classes("rec-id").tooltip(
+                                d.name
+                            )
+                            ui.label(dur).classes("rec-dur")
                             ui.button(
-                                "Open",
+                                "Show in folder",
+                                icon="folder_open",
                                 on_click=lambda d=d: _open_folder(d),
-                            ).props("flat dense size=sm color=primary")
+                            ).props("flat dense size=sm color=primary no-caps").tooltip(
+                                "Open the folder containing the audio files and transcripts."
+                            )
 
             _refresh_recs()
             ui.timer(3.0, _refresh_recs)

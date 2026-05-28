@@ -306,6 +306,25 @@ body, .q-page, .nicegui-content {
      is left after the fixed-content columns. */
   max-width: 320px;
 }
+
+/* Human-friendly error cell: small icon + short label + chevron affordance. */
+.q-table .err-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--negative-700);
+  font-size: 13px;
+  cursor: pointer;
+}
+.q-table .err-cell .err-text {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.q-table .err-cell .err-icon { opacity: 0.85; }
+.q-table .err-cell .err-chev { opacity: 0.6; }
+.q-table tbody tr:hover .err-cell .err-chev { opacity: 1; }
 .q-table tbody tr:hover td {
   background: var(--surface-2);
 }
@@ -322,7 +341,6 @@ body, .q-page, .nicegui-content {
 }
 .rec-row:hover { background: var(--surface-2); }
 .rec-row .rec-id {
-  font-family: var(--font-mono);
   font-weight: 500;
   font-size: 13px;
   color: var(--ink-1);
