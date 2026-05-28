@@ -87,6 +87,17 @@ class TestClassifyHttpError:
     def test_401_maps_to_auth_error(self) -> None:
         assert isinstance(_classify_http_error(401, "bad key"), AuthError)
 
+    def test_unknown_status_falls_back_to_base_error(self) -> None:
+        # A 5xx (or any unmapped status) still surfaces with the raw body so
+        # users see what went wrong, just under the generic base class.
+        from transcription.backends.remote_openai_compat import RemoteAPIRequestError
+
+        err = _classify_http_error(503, "upstream down")
+
+        assert isinstance(err, RemoteAPIRequestError)
+        assert not isinstance(err, AuthError)
+        assert "upstream down" in str(err)
+
 
 # ---------------------------------------------------------------------------
 # Fallback chain inside run_transcription
@@ -179,6 +190,21 @@ class TestFallbackChain:
         by_track = {r.track: r.backend for r in results}
         assert by_track == {"mic": "primary", "system": "fake"}
 
+    def test_progress_callback_announces_recoverable_failure(self, tmp_path: Path) -> None:
+        # The user sees an inline note when one chain entry hands off — vital
+        # so a long-running session isn't silent on the "actually it's groq
+        # that failed and openai picked up" transition.
+        rec_dir = tmp_path / "rec"
+        _touch_track(rec_dir, "mic")
+
+        primary = _FailingBackend(PayloadTooLarge("413"), name="groq")
+        secondary = FakeBackend()
+        messages: list[str] = []
+
+        run_transcription(rec_dir, [primary, secondary], progress=messages.append)
+
+        assert any("groq failed" in m and "PayloadTooLarge" in m for m in messages)
+
     def test_meta_records_per_track_backend(self, tmp_path: Path) -> None:
         rec_dir = tmp_path / "rec"
         _touch_track(rec_dir, "mic")
@@ -260,6 +286,48 @@ class TestResume:
 
         assert len(backend.calls) == 1
 
+    def test_progress_callback_announces_skip(self, tmp_path: Path) -> None:
+        rec_dir = tmp_path / "rec"
+        mic_audio = _touch_track(rec_dir, "mic")
+        json_path = rec_dir / "mic.json"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "language": "fr",
+                    "duration": 1.0,
+                    "backend": "groq",
+                    "model": "x",
+                    "profile": SpeakerProfile.SOLO.value,
+                    "track": "mic",
+                    "segments": [],
+                    "meta": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+        future = mic_audio.stat().st_mtime + 10
+        os.utime(json_path, (future, future))
+
+        messages: list[str] = []
+        run_transcription(rec_dir, FakeBackend(), progress=messages.append)
+
+        assert any("Skipping mic" in m and "--force" in m for m in messages)
+
+    def test_malformed_json_triggers_re_transcribe(self, tmp_path: Path) -> None:
+        # A truncated / corrupt cache (e.g. crash mid-write) must NOT poison
+        # the resume — the orchestrator falls through to the backend instead.
+        rec_dir = tmp_path / "rec"
+        mic_audio = _touch_track(rec_dir, "mic")
+        json_path = rec_dir / "mic.json"
+        json_path.write_text("{not valid json", encoding="utf-8")
+        future = mic_audio.stat().st_mtime + 10
+        os.utime(json_path, (future, future))
+
+        backend = FakeBackend()
+        run_transcription(rec_dir, backend)
+
+        assert len(backend.calls) == 1
+
     def test_stale_json_triggers_re_transcribe(self, tmp_path: Path) -> None:
         # The user re-recorded over an old mic.flac; mtime of audio is now
         # newer than the cached transcript. The cache must lose.
@@ -338,6 +406,17 @@ class TestGetBackendChain:
 
         assert len(chain) == 1
         assert isinstance(chain[0], WhisperXLocalBackend)
+
+    def test_non_list_chain_raises(self, isolated_config_dir: Path) -> None:  # noqa: ARG002
+        # Guard against a user typo like `backend_fallback_chain = "remote_api"`
+        # (a string, not a list) — fail fast instead of iterating characters.
+        from transcription import config as cfg
+        from transcription.backends.factory import get_backend_chain
+
+        cfg.save_config({**cfg.DEFAULT_CONFIG, "backend_fallback_chain": "remote_api"})
+
+        with pytest.raises(ValueError, match="non-empty list"):
+            get_backend_chain()
 
     def test_chain_constructs_each_named_entry(
         self,
