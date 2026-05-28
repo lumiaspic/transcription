@@ -30,7 +30,7 @@ from . import config as cfg
 from .audio import devices as audio_devices
 from .audio.devices import SystemLoopbackUnavailable
 from .audio.recorder import DualRecorder
-from .backends.factory import get_backend
+from .backends.factory import get_backend_chain
 from .paths import recordings_dir
 from .pipeline.jobs import JobQueue
 from .pipeline.transcribe import run_transcription
@@ -188,6 +188,11 @@ def transcribe(
         False, "--no-diarize", help="Disable diarization on the system track."
     ),
     language: str = typer.Option(None, help="ISO code (e.g. 'fr'). Auto-detect if omitted."),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-transcribe tracks even if a fresh <track>.json already exists.",
+    ),
 ) -> None:
     """Run WhisperX on a recording's mic and system audio (synchronous; blocks until done).
 
@@ -198,13 +203,14 @@ def transcribe(
         typer.secho(f"Recording not found: {rec_dir}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    backend = get_backend(model=model)
+    backends = get_backend_chain(model=model)
     try:
         results = run_transcription(
             rec_dir=rec_dir,
-            backend=backend,
+            backend=backends,
             language=language,
             diarize=not no_diarize,
+            force=force,
             progress=lambda msg: typer.echo(msg),
         )
     except FileNotFoundError as e:

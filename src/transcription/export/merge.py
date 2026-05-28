@@ -36,9 +36,23 @@ def merge_to_markdown(results: list[TranscriptResult], path: Path) -> None:
 
     lines = ["# Transcript", ""]
     if results:
-        lines.append(
-            f"_Language: {results[0].language}, model: {results[0].model}, backend: {results[0].backend}_"
-        )
+        # If every track was handled by the same backend/model we keep the
+        # original compact one-liner. When the fallback chain mixed providers
+        # we break the metadata out per-track so the reader knows which
+        # segment came from where (e.g. mic via Groq, system via OpenAI).
+        backends = {r.backend for r in results}
+        models = {r.model for r in results}
+        if len(backends) == 1 and len(models) == 1:
+            lines.append(
+                f"_Language: {results[0].language}, model: {results[0].model}, "
+                f"backend: {results[0].backend}_"
+            )
+        else:
+            lines.append(f"_Language: {results[0].language}_")
+            lines.append("")
+            lines.append("_Per-track backend:_")
+            for r in results:
+                lines.append(f"- `{r.track}`: {r.backend} / {r.model}")
         # Speaker legend so the reader knows what each label maps to.
         unique = sorted({label for _, _, label, _ in rows})
         if unique:

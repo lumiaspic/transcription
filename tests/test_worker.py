@@ -45,7 +45,7 @@ def stub_get_backend(monkeypatch: pytest.MonkeyPatch) -> FakeBackend:
     Yields the FakeBackend so tests can inspect `.calls`.
     """
     fake = FakeBackend()
-    monkeypatch.setattr(worker_mod, "get_backend", lambda model=None: fake)
+    monkeypatch.setattr(worker_mod, "get_backend_chain", lambda model=None: [fake])
     return fake
 
 
@@ -77,9 +77,9 @@ class TestGetBackendMemoization:
     ) -> None:
         w = Worker(queue=queue)
 
-        backend = w._get_backend("medium")
+        chain = w._get_backend_chain("medium")
 
-        assert backend is stub_get_backend
+        assert chain == [stub_get_backend]
         assert "medium" in w._backends
 
     def test_second_call_with_same_model_returns_cached_instance(
@@ -87,18 +87,18 @@ class TestGetBackendMemoization:
         queue: JobQueue,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # Track how many times get_backend is called.
+        # Track how many times get_backend_chain is called.
         calls: list[str | None] = []
 
-        def fake_get_backend(model: str | None = None) -> FakeBackend:
+        def fake_get_chain(model: str | None = None) -> list[FakeBackend]:
             calls.append(model)
-            return FakeBackend()
+            return [FakeBackend()]
 
-        monkeypatch.setattr(worker_mod, "get_backend", fake_get_backend)
+        monkeypatch.setattr(worker_mod, "get_backend_chain", fake_get_chain)
         w = Worker(queue=queue)
 
-        first = w._get_backend("small")
-        second = w._get_backend("small")
+        first = w._get_backend_chain("small")
+        second = w._get_backend_chain("small")
 
         assert first is second
         # Critical for performance: avoids re-loading a 13s Whisper model.
@@ -109,11 +109,11 @@ class TestGetBackendMemoization:
         queue: JobQueue,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setattr(worker_mod, "get_backend", lambda model=None: FakeBackend())
+        monkeypatch.setattr(worker_mod, "get_backend_chain", lambda model=None: [FakeBackend()])
         w = Worker(queue=queue)
 
-        a = w._get_backend("small")
-        b = w._get_backend("large-v3")
+        a = w._get_backend_chain("small")
+        b = w._get_backend_chain("large-v3")
 
         assert a is not b
         assert set(w._backends.keys()) == {"small", "large-v3"}
@@ -126,11 +126,11 @@ class TestGetBackendMemoization:
         # None means "use config default" — kept distinct from explicit names
         # so a job pinned to "small" never shares a cached backend with a
         # job that lets the config decide.
-        monkeypatch.setattr(worker_mod, "get_backend", lambda model=None: FakeBackend())
+        monkeypatch.setattr(worker_mod, "get_backend_chain", lambda model=None: [FakeBackend()])
         w = Worker(queue=queue)
 
-        w._get_backend(None)
-        w._get_backend("small")
+        w._get_backend_chain(None)
+        w._get_backend_chain("small")
 
         assert "__config_default__" in w._backends
         assert "small" in w._backends
@@ -192,7 +192,7 @@ class TestExecuteFailure:
             def transcribe(self, *args, **kwargs):  # type: ignore[override]
                 raise RuntimeError("CUDA out of memory")
 
-        monkeypatch.setattr(worker_mod, "get_backend", lambda model=None: BrokenBackend())
+        monkeypatch.setattr(worker_mod, "get_backend_chain", lambda model=None: [BrokenBackend()])
 
         rec_dir = _setup_rec_dir(tmp_path, "rec_fail")
         job_id = queue.enqueue(recording_id="rec_fail", recording_dir=rec_dir)
