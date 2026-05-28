@@ -74,6 +74,16 @@ class TestHuggingFaceToken:
         assert ok is True
         assert "valid" in msg.lower()
 
+    def test_valid_token_with_unparseable_body_still_ok(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 200 but the body isn't valid JSON — we should swallow the error and
+        # still report the token as valid rather than crashing.
+        _patch_get(monkeypatch, _FakeResponse(200))
+        ok, msg = connectivity.test_huggingface_token("hf_abc")
+        assert ok is True
+        assert "valid" in msg.lower()
+
     @pytest.mark.parametrize("status", [401, 403])
     def test_rejected_token(self, monkeypatch: pytest.MonkeyPatch, status: int) -> None:
         _patch_get(monkeypatch, _FakeResponse(status))
