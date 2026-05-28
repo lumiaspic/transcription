@@ -39,6 +39,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "backend_mode": None,  # None = unset; set by first-run wizard. local_gpu|local_cpu|remote_api
     "model": "small",
     "language": None,  # None = auto-detect
+    # UI display language. None = auto-detect from the OS locale (falls back to
+    # English). Set to a supported code ("en", "fr") to force it. See i18n.py.
+    "ui_language": None,
     "compute_type_cuda": "float16",
     "compute_type_cpu": "int8",
     "recordings_dir": None,  # None = ./recordings in cwd

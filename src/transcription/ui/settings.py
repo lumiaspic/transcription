@@ -20,6 +20,7 @@ from nicegui import run, ui
 
 from .. import config as cfg
 from ..connectivity import test_huggingface_token, test_remote_connection
+from ..i18n import SUPPORTED_LANGUAGES, t
 from ..paths import config_file, jobs_db, logs_dir, recordings_dir
 from ..pipeline.hardware import HardwareProbe
 
@@ -33,39 +34,44 @@ RECORDING_FORMATS = ["flac", "wav"]
 SAMPLE_RATES = [16000, 22050, 44100, 48000]
 COMPRESS_CODECS = ["opus", "mp3"]
 
-# Subset of ISO 639-1 codes Whisper handles well. Order: "auto" first, then
-# the rest alphabetical by language name. The empty-string code maps to
-# auto-detection in the config layer.
-LANGUAGE_OPTIONS: dict[str, str] = {
-    "": "Auto-detect",
-    "ar": "Arabic",
-    "zh": "Chinese",
-    "cs": "Czech",
-    "da": "Danish",
-    "nl": "Dutch",
-    "en": "English",
-    "fi": "Finnish",
-    "fr": "French",
-    "de": "German",
-    "el": "Greek",
-    "he": "Hebrew",
-    "hi": "Hindi",
-    "hu": "Hungarian",
-    "id": "Indonesian",
-    "it": "Italian",
-    "ja": "Japanese",
-    "ko": "Korean",
-    "no": "Norwegian",
-    "pl": "Polish",
-    "pt": "Portuguese",
-    "ro": "Romanian",
-    "ru": "Russian",
-    "es": "Spanish",
-    "sv": "Swedish",
-    "tr": "Turkish",
-    "uk": "Ukrainian",
-    "vi": "Vietnamese",
-}
+# Subset of ISO 639-1 codes Whisper handles well, in display order ("auto"
+# first). The empty-string code maps to auto-detection in the config layer.
+# Display names come from the i18n catalog ("lang.<code>") at render time.
+LANGUAGE_CODES: tuple[str, ...] = (
+    "",
+    "ar",
+    "zh",
+    "cs",
+    "da",
+    "nl",
+    "en",
+    "fi",
+    "fr",
+    "de",
+    "el",
+    "he",
+    "hi",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "ko",
+    "no",
+    "pl",
+    "pt",
+    "ro",
+    "ru",
+    "es",
+    "sv",
+    "tr",
+    "uk",
+    "vi",
+)
+
+
+def _language_options() -> dict[str, str]:
+    """Build {code: localized name} for the spoken-language picker."""
+    return {code: t("lang.auto") if code == "" else t(f"lang.{code}") for code in LANGUAGE_CODES}
 
 
 # Common OpenAI-compatible endpoints — drop-down presets that just prefill
@@ -95,13 +101,10 @@ def _int_or_default(v: Any, default: int) -> int:
 def _set_token_dialog(service: str, label: str, on_done) -> None:
     """Small password prompt — keyring writes happen on Save."""
     with ui.dialog() as d, ui.card().classes("min-w-[420px] gap-3"):
-        ui.label(f"Set {label}").classes("dlg-title")
-        ui.label(
-            f"Stored in the OS keyring under service '{service}'. "
-            "Never written to disk in plain text."
-        ).classes("dlg-sub")
+        ui.label(t("settings.set_token_title", label=label)).classes("dlg-title")
+        ui.label(t("settings.set_token_sub", service=service)).classes("dlg-sub")
         token_input = (
-            ui.input(label="Token", password=True, password_toggle_button=True)
+            ui.input(label=t("input.token"), password=True, password_toggle_button=True)
             .props("autofocus outlined dense")
             .classes("w-full")
         )
@@ -109,27 +112,27 @@ def _set_token_dialog(service: str, label: str, on_done) -> None:
         def _save() -> None:
             token = (token_input.value or "").strip()
             if not token:
-                ui.notify("Empty token — not saved.", type="warning")
+                ui.notify(t("settings.token_empty"), type="warning")
                 return
             try:
                 cfg.set_token(service, token)
-                ui.notify(f"Token for '{service}' saved in keyring.", type="positive")
+                ui.notify(t("settings.token_saved", service=service), type="positive")
                 on_done()
                 d.close()
             except Exception as e:  # pragma: no cover - keyring backend errors
                 log.exception("set_token failed")
-                ui.notify(f"Failed to store token: {e}", type="negative")
+                ui.notify(t("settings.token_store_failed", error=e), type="negative")
 
         with ui.row().classes("justify-end gap-2 w-full"):
-            ui.button("Cancel", on_click=d.close).props("flat no-caps color=primary")
-            ui.button("Save", on_click=_save).props("color=primary unelevated no-caps")
+            ui.button(t("action.cancel"), on_click=d.close).props("flat no-caps color=primary")
+            ui.button(t("action.save"), on_click=_save).props("color=primary unelevated no-caps")
     d.open()
 
 
 def _confirm_reload(message: str) -> None:
     """Offer to reload the UI when a saved change needs a restart to take effect."""
     with ui.dialog() as d, ui.card().classes("min-w-[420px] gap-3"):
-        ui.label("Reload required").classes("dlg-title")
+        ui.label(t("settings.reload_required")).classes("dlg-title")
         ui.label(message).classes("dlg-sub")
 
         def _reload() -> None:
@@ -137,8 +140,10 @@ def _confirm_reload(message: str) -> None:
             ui.navigate.reload()
 
         with ui.row().classes("justify-end gap-2 w-full"):
-            ui.button("Later", on_click=d.close).props("flat no-caps color=primary")
-            ui.button("Reload now", on_click=_reload).props("color=primary unelevated no-caps")
+            ui.button(t("action.later"), on_click=d.close).props("flat no-caps color=primary")
+            ui.button(t("action.reload_now"), on_click=_reload).props(
+                "color=primary unelevated no-caps"
+            )
     d.open()
 
 
@@ -155,6 +160,7 @@ def open_settings_dialog() -> None:
         "backend_mode": initial_backend_mode,
         "model": c.get("model") or "small",
         "language": c.get("language") or "",
+        "ui_language": c.get("ui_language") or "",
         "recording_sample_rate": _int_or_default(c.get("recording_sample_rate"), 16000),
         "recording_format": (c.get("recording_format") or "flac").lower(),
         "recordings_dir": c.get("recordings_dir") or "",
@@ -178,50 +184,53 @@ def open_settings_dialog() -> None:
         with ui.row().classes("settings-header items-center justify-between w-full"):
             with ui.row().classes("items-center gap-2"):
                 ui.icon("settings").classes("text-xl")
-                ui.label("Settings").classes("settings-title")
+                ui.label(t("settings.title")).classes("settings-title")
             ui.button(icon="close", on_click=dialog.close).props("flat round dense color=primary")
 
         # Tabs
         with ui.tabs().props("dense no-caps inline-label").classes("settings-tabs") as tabs:
-            tab_general = ui.tab("General", icon="tune")
-            tab_record = ui.tab("Recording", icon="mic")
-            tab_local = ui.tab("Local backend", icon="memory")
-            tab_remote = ui.tab("Remote API", icon="cloud")
-            tab_tokens = ui.tab("Tokens", icon="key")
-            tab_about = ui.tab("About", icon="info")
+            tab_general = ui.tab("general", label=t("settings.tab.general"), icon="tune")
+            tab_record = ui.tab("recording", label=t("settings.tab.recording"), icon="mic")
+            tab_local = ui.tab("local", label=t("settings.tab.local"), icon="memory")
+            tab_remote = ui.tab("remote", label=t("settings.tab.remote"), icon="cloud")
+            tab_tokens = ui.tab("tokens", label=t("settings.tab.tokens"), icon="key")
+            tab_about = ui.tab("about", label=t("settings.tab.about"), icon="info")
 
         with ui.tab_panels(tabs, value=tab_general).classes("settings-panels w-full"):
             # ---------- General ----------
             with ui.tab_panel(tab_general):
-                _section_title("Backend mode")
-                _section_help(
-                    "How transcription runs on this machine. Local GPU is fastest "
-                    "if you have a CUDA-capable NVIDIA card. Remote API offloads "
-                    "the work to an OpenAI-compatible endpoint."
+                _section_title(t("settings.ui_language"))
+                _section_help(t("settings.ui_language_help"))
+                # "" => auto-detect from OS locale.
+                ui_lang_options = {"": t("lang.auto"), **dict(SUPPORTED_LANGUAGES)}
+                ui_lang_initial = (
+                    form["ui_language"] if form["ui_language"] in SUPPORTED_LANGUAGES else ""
                 )
+                ui.select(
+                    ui_lang_options,
+                    value=ui_lang_initial,
+                    on_change=lambda e: form.update(ui_language=e.value or ""),
+                ).props("outlined dense").classes("w-full max-w-xs")
+
+                _section_title(t("settings.backend_mode"))
+                _section_help(t("settings.backend_mode_help"))
                 _backend_mode_picker(form, hw)
 
-                _section_title("Whisper model")
-                _section_help(
-                    "Bigger models are more accurate but slower and need more "
-                    "memory. 'small' is a good default for most CPUs/GPUs."
-                )
+                _section_title(t("settings.whisper_model"))
+                _section_help(t("settings.whisper_model_help"))
                 ui.select(
                     WHISPER_MODELS,
                     value=form["model"],
                     on_change=lambda e: form.update(model=e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
-                _section_title("Language")
-                _section_help(
-                    "Pick the spoken language to transcribe. 'Auto-detect' lets "
-                    "the model decide on each track."
-                )
+                _section_title(t("settings.language"))
+                _section_help(t("settings.language_help"))
                 # Normalize the stored value: anything not in the known
                 # list (custom code, blank, None) falls back to "" (Auto).
-                lang_initial = form["language"] if form["language"] in LANGUAGE_OPTIONS else ""
+                lang_initial = form["language"] if form["language"] in LANGUAGE_CODES else ""
                 ui.select(
-                    LANGUAGE_OPTIONS,
+                    _language_options(),
                     value=lang_initial,
                     with_input=True,
                     on_change=lambda e: form.update(language=e.value or ""),
@@ -229,33 +238,24 @@ def open_settings_dialog() -> None:
 
             # ---------- Recording ----------
             with ui.tab_panel(tab_record):
-                _section_title("Sample rate")
-                _section_help(
-                    "Whisper and pyannote both resample to 16 kHz internally. "
-                    "Higher rates only matter if you also want playback-quality archives."
-                )
+                _section_title(t("settings.sample_rate"))
+                _section_help(t("settings.sample_rate_help"))
                 ui.select(
                     {sr: f"{sr // 1000} kHz" for sr in SAMPLE_RATES},
                     value=form["recording_sample_rate"],
                     on_change=lambda e: form.update(recording_sample_rate=int(e.value)),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
-                _section_title("File format")
-                _section_help(
-                    "FLAC is lossless and about half the size of WAV. "
-                    "Use WAV only if you need raw uncompressed audio."
-                )
+                _section_title(t("settings.file_format"))
+                _section_help(t("settings.file_format_help"))
                 ui.select(
                     RECORDING_FORMATS,
                     value=form["recording_format"],
                     on_change=lambda e: form.update(recording_format=e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
-                _section_title("Recordings folder")
-                _section_help(
-                    "Where audio and transcripts are stored. Leave blank to "
-                    "use ./recordings/ in the current working directory."
-                )
+                _section_title(t("settings.recordings_folder"))
+                _section_help(t("settings.recordings_folder_help"))
                 rec_dir_input = (
                     ui.input(
                         placeholder=str(recordings_dir()),
@@ -267,68 +267,59 @@ def open_settings_dialog() -> None:
                 )
                 with ui.row().classes("gap-2"):
                     ui.button(
-                        "Open current folder",
+                        t("settings.open_current_folder"),
                         on_click=lambda: _open_path(recordings_dir()),
                     ).props("flat dense no-caps color=primary")
                     ui.button(
-                        "Use default",
+                        t("settings.use_default"),
                         on_click=lambda: _reset_field(form, rec_dir_input, "recordings_dir", ""),
                     ).props("flat dense no-caps color=primary")
 
             # ---------- Local backend ----------
             with ui.tab_panel(tab_local):
-                _section_title("CUDA compute type")
-                _section_help(
-                    "Precision used when running WhisperX on an NVIDIA GPU. "
-                    "'float16' is the fastest, 'int8_float16' uses less VRAM."
-                )
+                _section_title(t("settings.cuda_compute"))
+                _section_help(t("settings.cuda_compute_help"))
                 ui.select(
                     CUDA_COMPUTE_TYPES,
                     value=form["compute_type_cuda"],
                     on_change=lambda e: form.update(compute_type_cuda=e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
-                _section_title("CPU compute type")
-                _section_help(
-                    "Precision used when running WhisperX on CPU. "
-                    "'int8' is the only practical choice on most machines."
-                )
+                _section_title(t("settings.cpu_compute"))
+                _section_help(t("settings.cpu_compute_help"))
                 ui.select(
                     CPU_COMPUTE_TYPES,
                     value=form["compute_type_cpu"],
                     on_change=lambda e: form.update(compute_type_cpu=e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
-                _section_title("Detected hardware")
+                _section_title(t("settings.detected_hw"))
                 with ui.element("div").classes("hw-grid"):
-                    _hw_row("Platform", hw.platform)
-                    _hw_row("CPU cores", str(hw.cpu_cores))
+                    _hw_row(t("hw.platform"), hw.platform)
+                    _hw_row(t("hw.cpu_cores"), str(hw.cpu_cores))
                     if hw.has_cuda:
                         _hw_row(
-                            "GPU",
+                            t("hw.gpu"),
                             f"{hw.gpu_name} — {hw.vram_gb:.1f} GB VRAM",
                             kind="ok",
                         )
-                        _hw_row("CUDA", hw.cuda_version or "unknown")
+                        _hw_row(t("hw.cuda"), hw.cuda_version or t("hw.cuda_unknown"))
                         if hw.driver_version:
-                            _hw_row("Driver", hw.driver_version)
+                            _hw_row(t("hw.driver"), hw.driver_version)
                     elif hw.has_mps:
-                        _hw_row("GPU", "Apple Silicon (MPS)", kind="ok")
+                        _hw_row(t("hw.gpu"), t("hw.gpu_apple"), kind="ok")
                     else:
-                        _hw_row("GPU", "none detected", kind="warn")
-                    _hw_row("Python", hw.python_version)
+                        _hw_row(t("hw.gpu"), t("hw.gpu_none"), kind="warn")
+                    _hw_row(t("hw.python"), hw.python_version)
 
             # ---------- Remote API ----------
             with ui.tab_panel(tab_remote):
-                _section_title("Endpoint")
-                _section_help(
-                    "Any OpenAI-compatible /audio/transcriptions endpoint. "
-                    "Pick a preset to prefill the base URL or type a custom one."
-                )
+                _section_title(t("settings.endpoint"))
+                _section_help(t("settings.endpoint_help"))
 
                 base_url_input = (
                     ui.input(
-                        label="Base URL",
+                        label=t("input.base_url"),
                         placeholder="https://api.openai.com/v1",
                         value=form["remote_api_base_url"],
                         on_change=lambda e: form.update(remote_api_base_url=e.value),
@@ -345,7 +336,7 @@ def open_settings_dialog() -> None:
 
                 ui.select(
                     list(REMOTE_PRESETS.keys()),
-                    label="Preset",
+                    label=t("input.preset"),
                     value="(custom)",
                     on_change=lambda e: _apply_preset(e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
@@ -357,29 +348,29 @@ def open_settings_dialog() -> None:
                     slot = form.get("remote_api_token_service") or "remote_api"
                     token = cfg.get_token(slot) or ""
                     if not token:
-                        remote_test_result.text = (
-                            f"No API key stored under '{slot}' — add it in the Tokens tab first."
-                        )
+                        remote_test_result.text = t("settings.remote_no_key", slot=slot)
                         remote_test_result.classes(remove="ok pending", add="error")
                         return
-                    remote_test_result.text = "Testing…"
+                    remote_test_result.text = t("common.testing")
                     remote_test_result.classes(remove="ok error", add="pending")
                     ok, msg = await run.io_bound(test_remote_connection, base, token)
                     remote_test_result.text = msg
                     remote_test_result.classes(remove="pending", add="ok" if ok else "error")
 
-                ui.button("Test connection", on_click=_test_remote).props("outline dense no-caps")
+                ui.button(t("action.test_connection"), on_click=_test_remote).props(
+                    "outline dense no-caps"
+                )
 
-                _section_title("Model")
-                _section_help("Server-side model name, e.g. 'whisper-1' or 'whisper-large-v3'.")
+                _section_title(t("settings.remote_model"))
+                _section_help(t("settings.remote_model_help"))
                 ui.input(
                     placeholder="whisper-1",
                     value=form["remote_api_model"],
                     on_change=lambda e: form.update(remote_api_model=e.value),
                 ).props("outlined dense").classes("w-full max-w-xs")
 
-                _section_title("Timeout")
-                _section_help("How long to wait for a single transcription request (seconds).")
+                _section_title(t("settings.timeout"))
+                _section_help(t("settings.timeout_help"))
                 ui.number(
                     value=form["remote_api_timeout_seconds"],
                     min=10,
@@ -390,15 +381,11 @@ def open_settings_dialog() -> None:
                     ),
                 ).props("outlined dense suffix=s").classes("w-full max-w-xs")
 
-                _section_title("Upload compression")
-                _section_help(
-                    "Files larger than this threshold are re-encoded to mono "
-                    "Opus before upload to stay under provider size caps "
-                    "(OpenAI / Groq cap at 25 MB)."
-                )
+                _section_title(t("settings.upload_compression"))
+                _section_help(t("settings.upload_compression_help"))
                 with ui.row().classes("gap-3 w-full"):
                     ui.number(
-                        label="Threshold (MB)",
+                        label=t("settings.threshold_mb"),
                         value=form["remote_api_max_upload_mb"],
                         min=1,
                         max=500,
@@ -409,23 +396,19 @@ def open_settings_dialog() -> None:
                     ).props("outlined dense").classes("max-w-[160px]")
                     ui.select(
                         COMPRESS_CODECS,
-                        label="Codec",
+                        label=t("settings.codec"),
                         value=form["remote_api_compress_codec"],
                         on_change=lambda e: form.update(remote_api_compress_codec=e.value),
                     ).props("outlined dense").classes("max-w-[140px]")
                     ui.input(
-                        label="Bitrate",
+                        label=t("settings.bitrate"),
                         placeholder="16k",
                         value=form["remote_api_compress_bitrate"],
                         on_change=lambda e: form.update(remote_api_compress_bitrate=e.value),
                     ).props("outlined dense").classes("max-w-[140px]")
 
-                _section_title("Keyring slot")
-                _section_help(
-                    "Service name under which the API key is stored. "
-                    "Defaults to 'remote_api'; pick a custom name to keep "
-                    "multiple providers side by side."
-                )
+                _section_title(t("settings.keyring_slot"))
+                _section_help(t("settings.keyring_slot_help"))
                 ui.input(
                     placeholder="remote_api",
                     value=form["remote_api_token_service"],
@@ -434,11 +417,7 @@ def open_settings_dialog() -> None:
 
             # ---------- Tokens ----------
             with ui.tab_panel(tab_tokens):
-                _section_help(
-                    "Tokens are stored in the OS keyring (Windows Credential "
-                    "Manager / macOS Keychain / libsecret on Linux) — never on "
-                    "disk in plain text."
-                )
+                _section_help(t("settings.tokens_help"))
                 tokens_container = ui.column().classes("w-full gap-3")
                 _render_tokens(tokens_container, form["remote_api_token_service"])
 
@@ -453,38 +432,37 @@ def open_settings_dialog() -> None:
 
             # ---------- About ----------
             with ui.tab_panel(tab_about):
-                _section_title("Paths")
+                _section_title(t("settings.paths"))
                 with ui.element("div").classes("hw-grid"):
-                    _hw_row("Config file", str(config_file()))
-                    _hw_row("Jobs DB", str(jobs_db()))
-                    _hw_row("Logs", str(logs_dir()))
-                    _hw_row("Recordings", str(recordings_dir()))
+                    _hw_row(t("settings.path.config"), str(config_file()))
+                    _hw_row(t("settings.path.jobs_db"), str(jobs_db()))
+                    _hw_row(t("settings.path.logs"), str(logs_dir()))
+                    _hw_row(t("settings.path.recordings"), str(recordings_dir()))
                 with ui.row().classes("gap-2 mt-2"):
                     ui.button(
-                        "Open config folder",
+                        t("settings.open_config_folder"),
                         on_click=lambda: _open_path(config_file().parent),
                     ).props("flat dense no-caps color=primary")
                     ui.button(
-                        "Open logs folder",
+                        t("settings.open_logs_folder"),
                         on_click=lambda: _open_path(logs_dir()),
                     ).props("flat dense no-caps color=primary")
 
-                _section_title("First-run wizard")
-                _section_help(
-                    "Clears the backend mode so the welcome wizard is shown "
-                    "again on next launch. Useful if you swapped hardware."
-                )
+                _section_title(t("settings.first_run_wizard"))
+                _section_help(t("settings.first_run_wizard_help"))
                 ui.button(
-                    "Re-run wizard…",
+                    t("settings.rerun_wizard"),
                     on_click=lambda: _reset_wizard(),
                 ).props("flat dense no-caps color=primary")
 
         # Footer
         with ui.row().classes("settings-footer items-center justify-end w-full"):
             with ui.row().classes("gap-2"):
-                ui.button("Cancel", on_click=dialog.close).props("flat no-caps color=primary")
+                ui.button(t("action.cancel"), on_click=dialog.close).props(
+                    "flat no-caps color=primary"
+                )
                 ui.button(
-                    "Save",
+                    t("action.save"),
                     on_click=lambda: _save_all(form, initial_snapshot, dialog),
                 ).props("color=positive unelevated no-caps")
 
@@ -575,7 +553,7 @@ def _render_tokens(container: ui.element, remote_service: str) -> None:
         services.append((svc, desc))
         seen.add(svc)
     if remote_service and remote_service not in seen:
-        services.append((remote_service, f"Custom remote API key slot '{remote_service}'"))
+        services.append((remote_service, t("settings.token_custom_desc", slot=remote_service)))
 
     with container:
         for svc, desc in services:
@@ -586,7 +564,7 @@ def _render_tokens(container: ui.element, remote_service: str) -> None:
                     ui.html(f'<div class="token-desc">{html.escape(desc)}</div>')
                 ui.html(
                     f'<span class="token-status {"set" if present else "missing"}">'
-                    f"{'set' if present else 'not set'}</span>"
+                    f"{html.escape(t('settings.token_set') if present else t('settings.token_not_set'))}</span>"
                 )
                 with ui.row().classes("gap-1 ml-auto"):
                     if present:
@@ -599,16 +577,18 @@ def _render_tokens(container: ui.element, remote_service: str) -> None:
                                 base = (cfg.load_config().get("remote_api_base_url") or "").strip()
                                 if not base:
                                     ui.notify(
-                                        "Set the Remote API base URL first (Remote API tab).",
+                                        t("settings.set_base_url_first"),
                                         type="warning",
                                     )
                                     return
                                 ok, msg = await run.io_bound(test_remote_connection, base, token)
                             ui.notify(msg, type="positive" if ok else "negative")
 
-                        ui.button("Test", on_click=_test).props("flat dense no-caps color=primary")
+                        ui.button(t("action.test"), on_click=_test).props(
+                            "flat dense no-caps color=primary"
+                        )
                     ui.button(
-                        "Set…" if not present else "Replace…",
+                        t("action.set") if not present else t("action.replace"),
                         on_click=lambda _e=None, s=svc, d=desc: _set_token_dialog(
                             s, d, lambda: _render_tokens(container, remote_service)
                         ),
@@ -617,10 +597,10 @@ def _render_tokens(container: ui.element, remote_service: str) -> None:
 
                         def _remove(_e=None, s: str = svc) -> None:
                             cfg.remove_token(s)
-                            ui.notify(f"Removed token for '{s}'.", type="warning")
+                            ui.notify(t("settings.token_removed", service=s), type="warning")
                             _render_tokens(container, remote_service)
 
-                        ui.button("Remove", on_click=_remove).props(
+                        ui.button(t("action.remove"), on_click=_remove).props(
                             "flat dense no-caps color=negative"
                         )
 
@@ -637,7 +617,7 @@ def _open_path(path: Path) -> None:
     import sys as _sys
 
     if not path.exists():
-        ui.notify(f"Path does not exist: {path}", type="warning")
+        ui.notify(t("settings.path_missing", path=path), type="warning")
         return
     if _sys.platform == "win32":
         os.startfile(str(path))  # type: ignore[attr-defined]
@@ -652,8 +632,8 @@ def _reset_wizard() -> None:
     c = cfg.load_config()
     c["backend_mode"] = None
     cfg.save_config(c)
-    ui.notify("Wizard will run on next launch.", type="positive")
-    _confirm_reload("The first-run wizard will appear after reload.")
+    ui.notify(t("settings.wizard_next_launch"), type="positive")
+    _confirm_reload(t("settings.wizard_reload_message"))
 
 
 def _save_all(form: dict[str, Any], initial: dict[str, Any], dialog: ui.dialog) -> None:
@@ -666,6 +646,7 @@ def _save_all(form: dict[str, Any], initial: dict[str, Any], dialog: ui.dialog) 
     c["backend_mode"] = form["backend_mode"]
     c["model"] = form["model"]
     c["language"] = _none_if_blank(form.get("language"))
+    c["ui_language"] = _none_if_blank(form.get("ui_language"))
     c["recording_sample_rate"] = _int_or_default(form["recording_sample_rate"], 16000)
     c["recording_format"] = form["recording_format"]
     c["recordings_dir"] = _none_if_blank(form.get("recordings_dir"))
@@ -685,13 +666,14 @@ def _save_all(form: dict[str, Any], initial: dict[str, Any], dialog: ui.dialog) 
         cfg.save_config(c)
     except Exception as e:  # pragma: no cover - disk error
         log.exception("save_config failed")
-        ui.notify(f"Failed to save settings: {e}", type="negative")
+        ui.notify(t("settings.save_failed", error=e), type="negative")
         return
 
-    ui.notify("Settings saved.", type="positive")
+    ui.notify(t("settings.saved"), type="positive")
     log.info("Settings saved via GUI")
 
-    # Some keys only take effect after a fresh worker / page load.
+    # Some keys only take effect after a fresh worker / page load. ui_language
+    # is read when the page is built, so it needs a reload to re-render text.
     reload_keys = (
         "backend_mode",
         "recordings_dir",
@@ -700,12 +682,10 @@ def _save_all(form: dict[str, Any], initial: dict[str, Any], dialog: ui.dialog) 
         "remote_api_base_url",
         "remote_api_model",
         "remote_api_token_service",
+        "ui_language",
     )
     if any(form.get(k) != initial.get(k) for k in reload_keys):
         dialog.close()
-        _confirm_reload(
-            "Some changes (backend mode, paths, remote API endpoint) "
-            "only take effect after a reload."
-        )
+        _confirm_reload(t("settings.reload_message"))
     else:
         dialog.close()

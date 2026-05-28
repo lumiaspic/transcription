@@ -21,6 +21,7 @@ from nicegui import app, ui
 
 from .. import config as cfg
 from ..audio.devices import SystemLoopbackUnavailable
+from ..i18n import resolve_and_set_language, t
 from ..paths import recordings_dir
 from ..pipeline.hardware import HardwareProbe
 from .humanize import format_duration, humanize_error, humanize_recording_id
@@ -86,20 +87,6 @@ _STATUS_ICONS = {
     "failed": "error",
 }
 
-_STATUS_LABELS = {
-    "pending": "Waiting",
-    "running": "Processing",
-    "done": "Done",
-    "failed": "Failed",
-}
-
-_STATUS_TOOLTIPS = {
-    "pending": "Queued — waiting for the background service to pick it up.",
-    "running": "Currently being transcribed.",
-    "done": "Transcription finished. Click the row to open the folder.",
-    "failed": "Transcription failed. Click the row for details.",
-}
-
 
 def _humanize_iso_timestamp(iso: str | None) -> str:
     """Render an ISO 8601 timestamp as `humanize_recording_id` does.
@@ -151,7 +138,7 @@ def _start_recording() -> None:
         except OSError:
             pass
         ui.notify(
-            f"System audio capture unavailable: {e}",
+            t("notify.loopback_unavailable", error=e),
             type="negative",
             position="bottom",
             multi_line=True,
@@ -160,7 +147,7 @@ def _start_recording() -> None:
         )
         log.warning("UI: start recording aborted (system loopback unavailable): %s", e)
         return
-    ui.notify(f"Recording started: {rec_id}", type="positive", position="bottom")
+    ui.notify(t("notify.recording_started", rec_id=rec_id), type="positive", position="bottom")
     log.info("UI: started recording %s", rec_id)
 
 
@@ -195,7 +182,7 @@ def _stop_recording_and_enqueue() -> None:
 
     job_id = STATE.queue.enqueue(recording_id=rec_id, recording_dir=rec_dir)
     ui.notify(
-        f"Stopped after {_format_elapsed(elapsed)}. Enqueued as job #{job_id}.",
+        t("notify.recording_stopped", elapsed=_format_elapsed(elapsed), job_id=job_id),
         type="positive",
         position="bottom",
     )
@@ -206,20 +193,20 @@ def _show_job_error(job_id: int) -> None:
     j = STATE.queue.get(job_id)
     if not j:
         return
-    err_text = html.escape(j.error or "(no error message)")
+    err_text = html.escape(j.error or t("dialog.no_error"))
     with (
         ui.dialog().classes("job-error-dialog") as dialog,
         ui.card().classes("min-w-[600px] gap-3"),
     ):
-        ui.label(f"Job #{j.id} — {j.recording_id}").classes("dlg-title")
-        ui.label(f"Status: {j.status}").classes("dlg-sub")
+        ui.label(t("dialog.job_title", job_id=j.id, rec_id=j.recording_id)).classes("dlg-title")
+        ui.label(t("dialog.job_status", status=t(f"status.{j.status}.label"))).classes("dlg-sub")
         ui.html('<div class="dlg-divider"></div>')
-        ui.label("Error").classes("dlg-label")
+        ui.label(t("dialog.error")).classes("dlg-label")
         ui.html(f'<pre class="dlg-pre">{err_text}</pre>')
         with ui.row().classes("justify-end gap-2 w-full"):
-            ui.button("Close", on_click=dialog.close).props("flat color=primary no-caps")
+            ui.button(t("action.close"), on_click=dialog.close).props("flat color=primary no-caps")
             ui.button(
-                "Retry",
+                t("action.retry"),
                 on_click=lambda: (STATE.queue.retry(j.id), dialog.close()),
             ).props("color=primary unelevated no-caps")
     dialog.open()
@@ -244,23 +231,21 @@ def _build_header(*, show_worker: bool = True) -> None:
             if show_worker:
                 worker_wrap = ui.element("div").classes("worker-status")
                 with worker_wrap:
-                    ui.label("Background service")
+                    ui.label(t("header.worker"))
                     worker_dot = ui.icon("circle").classes("text-base")
 
                     def _update_dot() -> None:
                         alive = STATE.worker_alive()
                         worker_dot.props(f"color={'positive' if alive else 'grey'}")
                         worker_wrap.tooltip(
-                            "Background service is running — new recordings will be transcribed automatically."
-                            if alive
-                            else "Background service is not running. Restart the app to recover."
+                            t("header.worker_alive") if alive else t("header.worker_dead")
                         )
 
                     _update_dot()
                     ui.timer(2.0, _update_dot)
             ui.button(icon="settings", on_click=open_settings_dialog).props(
                 "flat round dense color=primary"
-            ).tooltip("Settings")
+            ).tooltip(t("header.settings"))
 
 
 def _setup_banner() -> None:
@@ -276,21 +261,18 @@ def _setup_banner() -> None:
 
     if mode in ("local_gpu", "local_cpu"):
         if not cfg.get_token("huggingface"):
-            msg = (
-                "Speaker labels are off. Add a free HuggingFace token to tell "
-                "different speakers apart on the system track."
-            )
+            msg = t("banner.hf_missing")
     elif mode == "remote_api":
         slot = c.get("remote_api_token_service") or "remote_api"
         missing = []
         if not (c.get("remote_api_base_url") or "").strip():
-            missing.append("endpoint URL")
+            missing.append(t("banner.missing.endpoint"))
         if not (c.get("remote_api_model") or "").strip():
-            missing.append("model")
+            missing.append(t("banner.missing.model"))
         if not cfg.get_token(slot):
-            missing.append("API key")
+            missing.append(t("banner.missing.api_key"))
         if missing:
-            msg = "Remote API isn't fully set up — missing: " + ", ".join(missing) + "."
+            msg = t("banner.remote_missing", missing=", ".join(missing))
 
     if not msg:
         return
@@ -298,9 +280,9 @@ def _setup_banner() -> None:
     with ui.element("div").classes("setup-banner w-full"):
         ui.icon("info").classes("setup-banner-icon")
         with ui.column().classes("gap-0"):
-            ui.label("Finish setup").classes("setup-banner-title")
+            ui.label(t("banner.title")).classes("setup-banner-title")
             ui.label(msg).classes("setup-banner-text")
-        ui.button("Open settings", on_click=open_settings_dialog).props(
+        ui.button(t("banner.open_settings"), on_click=open_settings_dialog).props(
             "unelevated dense no-caps color=primary"
         ).classes("ml-auto")
 
@@ -314,7 +296,7 @@ def _build_ui() -> None:
         # --- Recording card ---
         with ui.card().classes("w-full"):
             with ui.row().classes("items-center justify-between w-full"):
-                ui.label("Recording").classes("card-title")
+                ui.label(t("card.recording")).classes("card-title")
                 track_legend = ui.row().classes("items-center gap-2")
                 with track_legend:
                     ui.html(
@@ -326,17 +308,17 @@ def _build_ui() -> None:
                 rec_dot = ui.html('<span class="rec-dot"></span>')
                 rec_dot.visible = False
                 start_btn = ui.button(
-                    "● Start",
+                    t("rec.start"),
                     on_click=_start_recording,
                 ).props("color=positive size=lg unelevated")
                 stop_btn = ui.button(
-                    "■ Stop",
+                    t("rec.stop"),
                     on_click=_stop_recording_and_enqueue,
                 ).props("color=negative size=lg unelevated")
                 elapsed_label = (
-                    ui.label("Ready")
+                    ui.label(t("rec.ready"))
                     .classes("rec-timer ml-auto")
-                    .tooltip("Press Start to begin a new recording.")
+                    .tooltip(t("rec.ready_tip"))
                 )
 
             # Live peak meters — visible only while recording. Two rows of
@@ -372,7 +354,7 @@ def _build_ui() -> None:
                     mic_db.text = _peak_to_db_text(mic_peak)
                     sys_db.text = _peak_to_db_text(sys_peak)
                 else:
-                    elapsed_label.text = "Ready"
+                    elapsed_label.text = t("rec.ready")
                     elapsed_label.classes(remove="active")
                     rec_dot.visible = False
                     track_legend.visible = False
@@ -389,26 +371,34 @@ def _build_ui() -> None:
         # --- Jobs card ---
         with ui.card().classes("w-full"):
             with ui.row().classes("items-center justify-between w-full"):
-                ui.label("Jobs queue").classes("card-title").tooltip(
-                    "Transcription work currently running, queued, or recently finished."
-                )
+                ui.label(t("card.jobs")).classes("card-title").tooltip(t("card.jobs_tip"))
             jobs_table = ui.table(
                 columns=[
                     {"name": "id", "label": "#", "field": "id", "align": "right"},
                     {
                         "name": "recording_id",
-                        "label": "Recording",
+                        "label": t("table.recording"),
                         "field": "recording_id_display",
                         "align": "left",
                     },
-                    {"name": "status", "label": "Status", "field": "status", "align": "left"},
+                    {
+                        "name": "status",
+                        "label": t("table.status"),
+                        "field": "status",
+                        "align": "left",
+                    },
                     {
                         "name": "created_at",
-                        "label": "Created",
+                        "label": t("table.created"),
                         "field": "created_at_display",
                         "align": "left",
                     },
-                    {"name": "error", "label": "Error", "field": "error_display", "align": "left"},
+                    {
+                        "name": "error",
+                        "label": t("table.error"),
+                        "field": "error_display",
+                        "align": "left",
+                    },
                 ],
                 rows=[],
                 row_key="id",
@@ -472,8 +462,8 @@ def _build_ui() -> None:
                             "recording_id": j.recording_id,
                             "recording_id_display": humanize_recording_id(j.recording_id),
                             "status": j.status,
-                            "status_label": _STATUS_LABELS.get(j.status, j.status),
-                            "status_tip": _STATUS_TOOLTIPS.get(j.status, ""),
+                            "status_label": t(f"status.{j.status}.label") or j.status,
+                            "status_tip": t(f"status.{j.status}.tip"),
                             "status_icon": _STATUS_ICONS.get(j.status, "schedule"),
                             "created_at": j.created_at,
                             "created_at_display": _humanize_iso_timestamp(j.created_at),
@@ -489,9 +479,7 @@ def _build_ui() -> None:
 
         # --- Recordings card ---
         with ui.card().classes("w-full"):
-            ui.label("Recordings (recent)").classes("card-title").tooltip(
-                "Audio files captured on this machine. Click 'Show in folder' to open the file location."
-            )
+            ui.label(t("card.recordings")).classes("card-title").tooltip(t("card.recordings_tip"))
             recs_container = ui.column().classes("w-full gap-0")
 
             def _refresh_recs() -> None:
@@ -505,7 +493,7 @@ def _build_ui() -> None:
                     if not items:
                         ui.html(
                             '<div class="rec-row">'
-                            '<span class="empty">No recordings yet — press Start above to make one.</span>'
+                            f'<span class="empty">{html.escape(t("recs.empty"))}</span>'
                             "</div>"
                         )
                         return
@@ -514,11 +502,7 @@ def _build_ui() -> None:
                         done = meta.get("transcribed", False)
                         icon = "check_circle" if done else "schedule"
                         color = "text-green-600" if done else "text-gray-400"
-                        icon_tip = (
-                            "Transcribed — folder contains text and subtitles."
-                            if done
-                            else "Audio captured, transcription pending."
-                        )
+                        icon_tip = t("recs.transcribed_tip") if done else t("recs.pending_tip")
                         dur = format_duration(meta.get("duration_seconds"))
                         with ui.row().classes("rec-row w-full"):
                             ui.icon(icon).classes(color).tooltip(icon_tip)
@@ -527,11 +511,11 @@ def _build_ui() -> None:
                             )
                             ui.label(dur).classes("rec-dur")
                             ui.button(
-                                "Show in folder",
+                                t("recs.show_in_folder"),
                                 icon="folder_open",
                                 on_click=lambda d=d: _open_folder(d),
                             ).props("flat dense size=sm color=primary no-caps").tooltip(
-                                "Open the folder containing the audio files and transcripts."
+                                t("recs.show_in_folder_tip")
                             )
 
             _refresh_recs()
@@ -583,7 +567,7 @@ def _build_wizard() -> None:
 
     def _finish() -> None:
         cfg.set_config_key("backend_mode", state["choice"])
-        ui.notify("Setup complete — loading the app…", type="positive")
+        ui.notify(t("wizard.complete_notify"), type="positive")
         ui.navigate.reload()
 
     def _render() -> None:
@@ -598,24 +582,23 @@ def _build_wizard() -> None:
 
 
 def _wizard_step_backend(hw, state: dict[str, str], goto) -> None:
-    ui.label("Welcome").classes("wizard-hero")
-    ui.label(
-        "Step 1 of 2 — pick how transcription should run on this machine. "
-        "You can change this later from the Settings menu."
-    ).classes("wizard-lead")
+    ui.label(t("wizard.welcome")).classes("wizard-hero")
+    ui.label(t("wizard.backend_lead")).classes("wizard-lead")
 
     with ui.card().classes("w-full"):
-        ui.label("Detected hardware").classes("card-title")
-        ui.label(f"• Platform : {hw.platform}").classes("hw-row")
-        ui.label(f"• CPU      : {hw.cpu_cores} cores").classes("hw-row")
+        ui.label(t("wizard.detected_hw")).classes("card-title")
+        ui.label(t("wizard.hw_platform", value=hw.platform)).classes("hw-row")
+        ui.label(t("wizard.hw_cpu", cores=hw.cpu_cores)).classes("hw-row")
         if hw.has_cuda:
-            ui.label(f"• GPU      : {hw.gpu_name} — {hw.vram_gb:.1f} GB VRAM").classes("hw-row ok")
+            ui.label(t("wizard.hw_gpu", value=f"{hw.gpu_name} — {hw.vram_gb:.1f} GB VRAM")).classes(
+                "hw-row ok"
+            )
         else:
-            ui.label("• GPU      : none detected").classes("hw-row warn")
-        ui.label(f"• Python   : {hw.python_version}").classes("hw-row")
+            ui.label(t("wizard.hw_gpu_none")).classes("hw-row warn")
+        ui.label(t("wizard.hw_python", value=hw.python_version)).classes("hw-row")
 
     with ui.card().classes("w-full"):
-        ui.label("Backend mode").classes("card-title")
+        ui.label(t("wizard.backend_mode")).classes("card-title")
 
         rows: dict[str, ui.element] = {}
 
@@ -660,40 +643,34 @@ def _wizard_step_backend(hw, state: dict[str, str], goto) -> None:
         with ui.element("div").classes("radio-list w-full"):
             _radio_row(
                 "local_gpu",
-                title="Local — NVIDIA GPU",
+                title=t("backend.local_gpu.title"),
                 sub=(
-                    "WhisperX runs on your GPU. All data stays on this machine."
+                    t("backend.local_gpu.sub_ok")
                     if hw.has_cuda
-                    else "No CUDA GPU detected. Pick Local CPU instead."
+                    else t("backend.local_gpu.sub_none")
                 ),
-                tag=("recommended", False) if hw.has_cuda else ("disabled", True),
+                tag=(t("tag.recommended"), False) if hw.has_cuda else (t("tag.disabled"), True),
                 disabled=not hw.has_cuda,
             )
             _radio_row(
                 "local_cpu",
-                title="Local — CPU only",
-                sub=(
-                    "Slow (~30-60 min per hour of audio), but all-local and works on any machine."
-                ),
+                title=t("backend.local_cpu.title"),
+                sub=t("backend.local_cpu.sub"),
             )
             _radio_row(
                 "remote_api",
-                title="Remote API",
-                sub=(
-                    "Any OpenAI-compatible /audio/transcriptions endpoint "
-                    "(OpenAI, Groq, self-hosted whisper.cpp). No diarization — "
-                    "both tracks transcribe as single speakers."
-                ),
+                title=t("backend.remote.title"),
+                sub=t("backend.remote.sub_wizard"),
             )
 
     def _continue() -> None:
         if state["choice"] == "local_gpu" and not hw.has_cuda:
-            ui.notify("No CUDA GPU detected — pick Local CPU instead.", type="negative")
+            ui.notify(t("wizard.no_cuda_notify"), type="negative")
             return
         goto("token")
 
     with ui.row().classes("w-full justify-end"):
-        ui.button("Continue", on_click=_continue).props(
+        ui.button(t("action.continue"), on_click=_continue).props(
             "color=positive size=lg unelevated no-caps icon-right=arrow_forward"
         )
 
@@ -706,30 +683,27 @@ def _wizard_step_token(hw, state: dict[str, str], goto, finish) -> None:
 
 
 def _wizard_step_huggingface(state: dict[str, str], goto, finish) -> None:
-    ui.label("Speaker labels (optional)").classes("wizard-hero")
-    ui.label(
-        "Step 2 of 2 — to tell speakers apart on the system track, the app uses "
-        "pyannote, which needs a free HuggingFace token. Skip this and "
-        "transcription still works — everyone on the system track is just "
-        "labelled as one speaker."
-    ).classes("wizard-lead")
+    ui.label(t("wizard.hf_hero")).classes("wizard-hero")
+    ui.label(t("wizard.hf_lead")).classes("wizard-lead")
 
     with ui.card().classes("w-full gap-2"):
-        ui.label("Get your free token (2 minutes)").classes("card-title")
+        ui.label(t("wizard.hf_get_token")).classes("card-title")
         ui.html(
             '<ol class="wizard-steps">'
-            "<li>Create a free account and a <b>read</b> token at "
+            f"<li>{html.escape(t('wizard.hf_step1_pre'))}<b>{html.escape(t('wizard.hf_step1_read'))}</b>"
+            f"{html.escape(t('wizard.hf_step1_post'))}"
             '<a href="https://huggingface.co/settings/tokens" target="_blank">'
             "huggingface.co/settings/tokens</a>.</li>"
-            "<li>Accept the model licence (one click) at "
+            f"<li>{html.escape(t('wizard.hf_step2_pre'))}"
             '<a href="https://huggingface.co/pyannote/speaker-diarization-community-1" '
-            'target="_blank">the pyannote model page</a>.</li>'
-            "<li>Paste the token below.</li>"
+            f'target="_blank">{html.escape(t("wizard.hf_step2_link"))}</a>'
+            f"{html.escape(t('wizard.hf_step2_post'))}</li>"
+            f"<li>{html.escape(t('wizard.hf_step3'))}</li>"
             "</ol>"
         )
 
         token_input = (
-            ui.input(label="HuggingFace token", password=True, password_toggle_button=True)
+            ui.input(label=t("input.hf_token"), password=True, password_toggle_button=True)
             .props("outlined dense")
             .classes("w-full")
         )
@@ -740,7 +714,7 @@ def _wizard_step_huggingface(state: dict[str, str], goto, finish) -> None:
 
             from ..connectivity import test_huggingface_token
 
-            result.text = "Testing…"
+            result.text = t("common.testing")
             result.classes(remove="ok error", add="pending")
             ok, msg = await run.io_bound(test_huggingface_token, (token_input.value or "").strip())
             result.text = msg
@@ -749,34 +723,33 @@ def _wizard_step_huggingface(state: dict[str, str], goto, finish) -> None:
         def _save_and_finish() -> None:
             token = (token_input.value or "").strip()
             if not token:
-                ui.notify("Paste a token first, or use 'Skip for now'.", type="warning")
+                ui.notify(t("wizard.hf_paste_first"), type="warning")
                 return
             try:
                 cfg.set_token("huggingface", token)
             except Exception as e:  # pragma: no cover - keyring backend errors
                 log.exception("set_token failed")
-                ui.notify(f"Couldn't save the token: {e}", type="negative")
+                ui.notify(t("wizard.token_save_failed", error=e), type="negative")
                 return
             finish()
 
         with ui.row().classes("w-full justify-end gap-2"):
-            ui.button("Test token", on_click=_test).props("outline no-caps")
+            ui.button(t("action.test_token"), on_click=_test).props("outline no-caps")
 
     with ui.row().classes("w-full justify-between"):
-        ui.button("Back", on_click=lambda: goto("backend")).props("flat no-caps icon=arrow_back")
+        ui.button(t("action.back"), on_click=lambda: goto("backend")).props(
+            "flat no-caps icon=arrow_back"
+        )
         with ui.row().classes("gap-2"):
-            ui.button("Skip for now", on_click=finish).props("flat no-caps")
-            ui.button("Save and finish", on_click=_save_and_finish).props(
+            ui.button(t("action.skip_for_now"), on_click=finish).props("flat no-caps")
+            ui.button(t("action.save_and_finish"), on_click=_save_and_finish).props(
                 "color=positive size=lg unelevated no-caps"
             )
 
 
 def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
-    ui.label("Connect your transcription API").classes("wizard-hero")
-    ui.label(
-        "Step 2 of 2 — point the app at an OpenAI-compatible endpoint and paste "
-        "your API key. You can change any of this later in Settings → Remote API."
-    ).classes("wizard-lead")
+    ui.label(t("wizard.remote_hero")).classes("wizard-hero")
+    ui.label(t("wizard.remote_lead")).classes("wizard-lead")
 
     c = cfg.load_config()
     form = {
@@ -785,10 +758,10 @@ def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
     }
 
     with ui.card().classes("w-full gap-3"):
-        ui.label("Endpoint").classes("card-title")
+        ui.label(t("wizard.endpoint")).classes("card-title")
 
         base_input = (
-            ui.input(label="Base URL", value=form["base_url"])
+            ui.input(label=t("input.base_url"), value=form["base_url"])
             .props("outlined dense placeholder=https://api.groq.com/openai/v1")
             .classes("w-full")
         )
@@ -801,19 +774,19 @@ def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
         ui.select(
             list(REMOTE_PRESETS.keys()),
             value="(custom)",
-            label="Quick presets",
+            label=t("input.quick_presets"),
             on_change=_apply_preset,
         ).props("outlined dense").classes("w-full")
 
         model_input = (
-            ui.input(label="Model", value=form["model"])
+            ui.input(label=t("input.model"), value=form["model"])
             .props("outlined dense placeholder=whisper-large-v3")
             .classes("w-full")
         )
-        ui.label("e.g. 'whisper-large-v3' (Groq) or 'whisper-1' (OpenAI).").classes("wizard-hint")
+        ui.label(t("wizard.model_hint")).classes("wizard-hint")
 
         key_input = (
-            ui.input(label="API key", password=True, password_toggle_button=True)
+            ui.input(label=t("input.api_key"), password=True, password_toggle_button=True)
             .props("outlined dense")
             .classes("w-full")
         )
@@ -824,7 +797,7 @@ def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
 
             from ..connectivity import test_remote_connection
 
-            result.text = "Testing…"
+            result.text = t("common.testing")
             result.classes(remove="ok error", add="pending")
             ok, msg = await run.io_bound(
                 test_remote_connection,
@@ -839,7 +812,7 @@ def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
             model = (model_input.value or "").strip()
             key = (key_input.value or "").strip()
             if not (base and model and key):
-                ui.notify("Fill in the endpoint URL, model, and API key.", type="warning")
+                ui.notify(t("wizard.remote_fill"), type="warning")
                 return
             service = c.get("remote_api_token_service") or "remote_api"
             try:
@@ -848,16 +821,18 @@ def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
                 cfg.set_token(service, key)
             except Exception as e:  # pragma: no cover - keyring backend errors
                 log.exception("remote setup save failed")
-                ui.notify(f"Couldn't save settings: {e}", type="negative")
+                ui.notify(t("wizard.settings_save_failed", error=e), type="negative")
                 return
             finish()
 
         with ui.row().classes("w-full justify-end gap-2"):
-            ui.button("Test connection", on_click=_test).props("outline no-caps")
+            ui.button(t("action.test_connection"), on_click=_test).props("outline no-caps")
 
     with ui.row().classes("w-full justify-between"):
-        ui.button("Back", on_click=lambda: goto("backend")).props("flat no-caps icon=arrow_back")
-        ui.button("Save and finish", on_click=_save_and_finish).props(
+        ui.button(t("action.back"), on_click=lambda: goto("backend")).props(
+            "flat no-caps icon=arrow_back"
+        )
+        ui.button(t("action.save_and_finish"), on_click=_save_and_finish).props(
             "color=positive size=lg unelevated no-caps"
         )
 
@@ -897,10 +872,14 @@ def run_gui(*, port: int = 8765, native: bool = True) -> None:
     # "Script mode requires a valid script file" error.
     @ui.page("/")
     def _index() -> None:
+        # Resolve the UI language per connection (config may have changed since
+        # the last reload), before any t() call builds the page.
+        config = cfg.load_config()
+        resolve_and_set_language(config.get("ui_language"))
         # Stylesheet link must be inside the page scope (NiceGUI 3.x).
         ui.add_head_html(f'<link rel="stylesheet" href="{_theme_href()}">')
         # Dispatch: wizard on first run, main UI otherwise.
-        if cfg.load_config().get("backend_mode") is None:
+        if config.get("backend_mode") is None:
             _build_wizard()
         else:
             _build_ui()
