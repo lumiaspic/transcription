@@ -16,9 +16,8 @@ token setup.
 
 ### Easy install (recommended — no command line)
 
-1. Download **`Install-Transcription.bat`**:
-   - Open <https://github.com/lumiaspic/transcription/blob/main/packaging/Install-Transcription.bat>
-   - Click the download icon (top-right of the file view) to save it.
+1. Download **`Install-Transcription.bat`** (direct download):
+   <https://raw.githubusercontent.com/lumiaspic/transcription/main/Install-Transcription.bat>
 2. **Double-click** the downloaded `Install-Transcription.bat`.
    - Windows SmartScreen may warn about an unknown script → click
      **More info → Run anyway** (it just runs the public installer below).
