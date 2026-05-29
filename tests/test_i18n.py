@@ -54,8 +54,10 @@ class TestTranslate:
         )
 
     def test_interpolation_missing_kwarg_degrades_gracefully(self) -> None:
-        # Missing the {job_id}/{elapsed} kwargs must not raise.
-        out = i18n.t("notify.recording_stopped")
+        # Passing a kwarg but not the {job_id}/{elapsed} the string needs makes
+        # str.format raise KeyError; t() must swallow it and return the
+        # unformatted message rather than propagate.
+        out = i18n.t("notify.recording_stopped", unrelated="x")
         assert "{elapsed}" in out  # unformatted, but no exception
 
 
@@ -79,6 +81,18 @@ class TestResolveAndSetLanguage:
     ) -> None:
         for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
             monkeypatch.setenv(var, "ja_JP.UTF-8")
+        assert i18n.resolve_and_set_language("auto") == "en"
+
+    def test_auto_survives_locale_getlocale_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # No usable env vars, and getlocale() raises (it does on some
+        # misconfigured systems). Detection must swallow it and pick English.
+        for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+            monkeypatch.delenv(var, raising=False)
+
+        def _boom(*_args: object, **_kwargs: object) -> tuple[str, str]:
+            raise ValueError("unsupported locale setting")
+
+        monkeypatch.setattr(i18n._locale, "getlocale", _boom)
         assert i18n.resolve_and_set_language("auto") == "en"
 
 
