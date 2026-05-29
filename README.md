@@ -23,26 +23,40 @@
 
 Personal prototype, used daily on Windows 11 with an NVIDIA GPU. Works also on CPU-only machines and macOS (Apple Silicon via MPS, Intel via CPU). Built incrementally as a single pair-programming sprint with [Claude Code](https://claude.com/claude-code); the commit history is meant to be readable.
 
-## Install (~10 min)
+## Install on Windows — no command line needed
 
-Full instructions in [`packaging/README.md`](packaging/README.md).
+### ⬇️ [**Download the installer**](https://raw.githubusercontent.com/lumiaspic/transcription/main/Install-Transcription.bat) (`Install-Transcription.bat`)
 
-**Windows:**
-1. Download [`packaging/install.ps1`](packaging/install.ps1) — click **Raw** on GitHub, then save as.
-2. Open PowerShell where you saved it:
-   ```powershell
-   Set-ExecutionPolicy -Scope Process Bypass
-   .\install.ps1
-   ```
-   Installs `git` + `uv` if missing, clones the repo into `%LOCALAPPDATA%\Programs\transcription`, syncs ~3 GB of CUDA wheels, creates Desktop + Start Menu shortcuts.
-3. Set your HuggingFace token (one-time, enables speaker diarization):
-   ```powershell
-   cd $env:LOCALAPPDATA\Programs\transcription
-   uv run transcription config set-token huggingface
-   ```
-4. Launch via the **Transcription** Desktop shortcut.
+Then **3 steps**:
 
-**macOS:**
+1. **Double-click** the downloaded `Install-Transcription.bat`.
+2. Windows may show a blue **"Windows protected your PC"** warning (the script
+   isn't code-signed). Click **More info → Run anyway** — it just runs the
+   public installer. Keep the window open until it says **Done** (5–10 min the
+   first time: it downloads ~3 GB of PyTorch / CUDA wheels).
+3. Launch from the **`Transcription`** shortcut now on your Desktop. A first-run
+   wizard appears and walks you through the rest (backend choice + token).
+
+That's it. If anything fails, just double-click the `.bat` again — it resumes
+where it stopped.
+
+<details>
+<summary>Advanced install (PowerShell)</summary>
+
+```powershell
+irm https://raw.githubusercontent.com/lumiaspic/transcription/main/packaging/install.ps1 | iex
+```
+
+Installs `git` + `uv` if missing, clones the repo into
+`%LOCALAPPDATA%\Programs\transcription`, syncs ~3 GB of CUDA wheels, creates
+Desktop + Start Menu shortcuts. Set the HuggingFace token (for diarization)
+from the first-run wizard, or via `uv run transcription config set-token
+huggingface`. Full reference in [`packaging/README.md`](packaging/README.md).
+
+</details>
+
+## Install on macOS (~10 min)
+
 1. Download [`packaging/install.sh`](packaging/install.sh) — click **Raw**, save as.
 2. Run the installer:
    ```bash
