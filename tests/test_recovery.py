@@ -157,6 +157,15 @@ class TestFinalizeOrphan:
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         assert meta["format"] == "opus"
 
+    def test_unreadable_track_reports_extension_and_no_sample_rate(self, tmp_path: Path) -> None:
+        # A truncated/corrupt file from a mid-crash: libsndfile can't read it,
+        # but recovery must still report the format (from the extension) and a
+        # null sample_rate rather than crashing.
+        bad = tmp_path / "mic.opus"
+        bad.write_bytes(b"not really audio")
+
+        assert recovery._audio_metadata(bad) == (None, "opus")
+
     def test_enqueues_job_in_provided_queue_by_default(self, tmp_path: Path) -> None:
         _make_orphan_dir(tmp_path, "rec_enqueue")
         orphan = find_orphans(tmp_path)[0]
