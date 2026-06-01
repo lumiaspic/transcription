@@ -74,12 +74,18 @@ def _language_options() -> dict[str, str]:
     return {code: t("lang.auto") if code == "" else t(f"lang.{code}") for code in LANGUAGE_CODES}
 
 
+# Groq's OpenAI-compatible endpoint + a fast, accurate default model. The
+# first-run wizard steers users here (best results for most people), so these
+# are shared between the wizard's one-click preset and the presets drop-down.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_DEFAULT_MODEL = "whisper-large-v3"
+
 # Common OpenAI-compatible endpoints — drop-down presets that just prefill
 # the base URL field. User can still type anything.
 REMOTE_PRESETS = {
     "(custom)": "",
     "OpenAI": "https://api.openai.com/v1",
-    "Groq": "https://api.groq.com/openai/v1",
+    "Groq": GROQ_BASE_URL,
     "Local whisper.cpp": "http://localhost:8080/v1",
 }
 

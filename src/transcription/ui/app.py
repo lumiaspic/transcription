@@ -25,7 +25,7 @@ from ..i18n import resolve_and_set_language, t
 from ..paths import recordings_dir
 from ..pipeline.hardware import HardwareProbe
 from .humanize import format_duration, humanize_error, humanize_recording_id
-from .settings import REMOTE_PRESETS, open_settings_dialog
+from .settings import GROQ_BASE_URL, GROQ_DEFAULT_MODEL, REMOTE_PRESETS, open_settings_dialog
 from .state import STATE
 
 log = logging.getLogger(__name__)
@@ -556,8 +556,9 @@ def _build_wizard() -> None:
     hw = HardwareProbe.detect()
     _build_header(show_worker=False)
 
-    default = "local_gpu" if hw.has_cuda else "local_cpu"
-    state: dict[str, str] = {"choice": default, "step": "backend"}
+    # Remote (Groq) is the recommended default for everyone — it's the path to
+    # the best results for most people, GPU or not.
+    state: dict[str, str] = {"choice": "remote_api", "step": "backend"}
 
     container = ui.column().classes("w-full max-w-2xl mx-auto p-6 gap-4")
 
@@ -649,7 +650,7 @@ def _wizard_step_backend(hw, state: dict[str, str], goto) -> None:
                     if hw.has_cuda
                     else t("backend.local_gpu.sub_none")
                 ),
-                tag=(t("tag.recommended"), False) if hw.has_cuda else (t("tag.disabled"), True),
+                tag=None if hw.has_cuda else (t("tag.disabled"), True),
                 disabled=not hw.has_cuda,
             )
             _radio_row(
@@ -661,6 +662,7 @@ def _wizard_step_backend(hw, state: dict[str, str], goto) -> None:
                 "remote_api",
                 title=t("backend.remote.title"),
                 sub=t("backend.remote.sub_wizard"),
+                tag=(t("tag.recommended"), False),
             )
 
     def _continue() -> None:
@@ -756,6 +758,28 @@ def _wizard_step_remote(state: dict[str, str], goto, finish) -> None:
         "base_url": c.get("remote_api_base_url") or "",
         "model": c.get("remote_api_model") or "",
     }
+
+    def _apply_groq() -> None:
+        # base_input / model_input are created in the card below; this handler
+        # only fires on click, by which point they're bound.
+        base_input.value = GROQ_BASE_URL
+        model_input.value = GROQ_DEFAULT_MODEL
+        ui.notify(t("wizard.groq_applied"), type="positive")
+
+    with ui.card().classes("w-full gap-2"):
+        ui.label(t("wizard.groq_get_key")).classes("card-title")
+        ui.html(
+            '<ol class="wizard-steps">'
+            f"<li>{html.escape(t('wizard.groq_step1_pre'))}"
+            '<a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>.</li>'
+            f"<li>{html.escape(t('wizard.groq_step2'))}</li>"
+            f"<li>{html.escape(t('wizard.groq_step3'))}</li>"
+            "</ol>"
+        )
+        with ui.row().classes("w-full"):
+            ui.button(t("action.use_groq"), on_click=_apply_groq).props(
+                "color=primary unelevated no-caps icon=bolt"
+            )
 
     with ui.card().classes("w-full gap-3"):
         ui.label(t("wizard.endpoint")).classes("card-title")
