@@ -136,7 +136,7 @@ class FakeDualRecorder:
         speaker_name: str | None = None,
         *,
         sample_rate: int = 16_000,
-        format: str = "flac",
+        format: str = "opus",
     ) -> None:
         self.out_dir = out_dir
         self.mic_name = mic_name

@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v3"]
 CUDA_COMPUTE_TYPES = ["float16", "float32", "int8_float16", "int8"]
 CPU_COMPUTE_TYPES = ["int8", "float32"]
-RECORDING_FORMATS = ["flac", "wav"]
+RECORDING_FORMATS = ["opus", "flac", "wav"]
 SAMPLE_RATES = [16000, 22050, 44100, 48000]
 COMPRESS_CODECS = ["opus", "mp3"]
 
@@ -162,7 +162,7 @@ def open_settings_dialog() -> None:
         "language": c.get("language") or "",
         "ui_language": c.get("ui_language") or "",
         "recording_sample_rate": _int_or_default(c.get("recording_sample_rate"), 16000),
-        "recording_format": (c.get("recording_format") or "flac").lower(),
+        "recording_format": (c.get("recording_format") or "opus").lower(),
         "recordings_dir": c.get("recordings_dir") or "",
         "compute_type_cuda": c.get("compute_type_cuda") or "float16",
         "compute_type_cpu": c.get("compute_type_cpu") or "int8",

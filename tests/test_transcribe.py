@@ -45,9 +45,17 @@ def _touch_track(rec_dir: Path, track: str, ext: str = "flac") -> Path:
 
 
 class TestFindTrackFile:
+    def test_prefers_opus_over_flac_and_wav_when_all_exist(self, tmp_path: Path) -> None:
+        # New recordings are Opus; FLAC/WAV are older formats. If several
+        # somehow coexist (e.g. user converted manually), the newest wins.
+        _touch_track(tmp_path, "mic", ext="wav")
+        _touch_track(tmp_path, "mic", ext="flac")
+        _touch_track(tmp_path, "mic", ext="opus")
+
+        assert find_track_file(tmp_path, "mic") == tmp_path / "mic.opus"
+
     def test_prefers_flac_over_wav_when_both_exist(self, tmp_path: Path) -> None:
-        # New recordings are FLAC, legacy were WAV. If both somehow exist
-        # (e.g. user converted manually), the new format wins.
+        # Legacy recordings: FLAC still wins over WAV when no Opus is present.
         _touch_track(tmp_path, "mic", ext="wav")
         _touch_track(tmp_path, "mic", ext="flac")
 
@@ -63,7 +71,7 @@ class TestFindTrackFile:
 
     def test_constants_stay_in_sync(self) -> None:
         # Guard against silent drift between the constants and the function.
-        assert "flac" in TRACK_EXTS
+        assert "opus" in TRACK_EXTS and "flac" in TRACK_EXTS
         assert "mic" in KNOWN_TRACKS and "system" in KNOWN_TRACKS
 
 

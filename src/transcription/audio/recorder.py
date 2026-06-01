@@ -3,12 +3,15 @@
 Streams to disk in small chunks - bounded memory regardless of recording length.
 
 Format and sample rate are configurable (see config.recording_format and
-config.recording_sample_rate). Defaults are FLAC at 16 kHz: WhisperX and
+config.recording_sample_rate). Defaults are Opus at 16 kHz: WhisperX and
 pyannote both resample to 16 kHz internally, so anything higher is bytes
-on disk that the pipeline immediately discards.
+on disk that the pipeline immediately discards. Opus (in an Ogg container)
+is lossy but transparent for speech at roughly a tenth of FLAC's size,
+which keeps recordings small and well under remote-API upload caps. FLAC
+(lossless) and WAV (raw PCM) stay available for archival needs.
 
-Backward-compat: old recordings on disk as .wav remain readable thanks to
-the format-agnostic track lookup in pipeline/transcribe.py.
+Backward-compat: older recordings on disk as .flac / .wav remain readable
+thanks to the format-agnostic track lookup in pipeline/transcribe.py.
 """
 
 from __future__ import annotations
@@ -32,8 +35,18 @@ log = logging.getLogger(__name__)
 # Defaults used when no override is passed and no config exists. Constructor
 # arguments and the config keys take precedence over these.
 DEFAULT_SAMPLE_RATE = 16_000
-DEFAULT_FORMAT = "flac"
-SUPPORTED_FORMATS = ("flac", "wav")
+DEFAULT_FORMAT = "opus"
+
+# User-facing format name -> (libsndfile container, subtype, file extension).
+# Opus rides in an Ogg container; libsndfile streams it the same way as FLAC
+# and WAV, so the chunked write loop below is format-agnostic. PCM subtypes
+# only make sense for the lossless containers.
+_FORMAT_SPECS: dict[str, tuple[str, str, str]] = {
+    "opus": ("OGG", "OPUS", "opus"),
+    "flac": ("FLAC", "PCM_16", "flac"),
+    "wav": ("WAV", "PCM_16", "wav"),
+}
+SUPPORTED_FORMATS = tuple(_FORMAT_SPECS)
 
 CHUNK_SECONDS = (
     0.1  # 100 ms blocks; small enough for responsive stop, big enough to avoid syscall thrash
@@ -63,7 +76,8 @@ class TrackSpec:
     out_path: Path
     channels: int
     sample_rate: int
-    sf_format: str  # "FLAC" or "WAV" -- passed to sf.SoundFile
+    sf_format: str  # libsndfile container: "OGG" / "FLAC" / "WAV"
+    subtype: str  # libsndfile subtype: "OPUS" / "PCM_16"
     # Called after each captured chunk with a peak amplitude in [0.0, 1.0].
     # Used by the GUI to drive live level meters. No-op default so the spec
     # is still useful in tests that don't care about levels.
@@ -88,7 +102,7 @@ def _stream_track(spec: TrackSpec, stop: threading.Event) -> None:
                 mode="w",
                 samplerate=spec.sample_rate,
                 channels=spec.channels,
-                subtype="PCM_16",
+                subtype=spec.subtype,
                 format=spec.sf_format,
             ) as f,
         ):
@@ -113,7 +127,7 @@ class DualRecorder:
     """Records mic + system loopback into two separate audio files.
 
     Usage:
-        rec = DualRecorder(out_dir, sample_rate=16000, format="flac")
+        rec = DualRecorder(out_dir, sample_rate=16000, format="opus")
         rec.start()
         ...  # capture runs in background threads
         rec.stop()
@@ -129,14 +143,15 @@ class DualRecorder:
         format: str = DEFAULT_FORMAT,
     ) -> None:
         fmt = format.lower()
-        if fmt not in SUPPORTED_FORMATS:
+        if fmt not in _FORMAT_SPECS:
             raise ValueError(f"Unsupported format {format!r}. Use one of: {SUPPORTED_FORMATS}")
+        sf_format, subtype, ext = _FORMAT_SPECS[fmt]
         self.sample_rate = sample_rate
         self.format = fmt
 
         self.out_dir = out_dir
-        self.mic_path = out_dir / f"mic.{fmt}"
-        self.system_path = out_dir / f"system.{fmt}"
+        self.mic_path = out_dir / f"mic.{ext}"
+        self.system_path = out_dir / f"system.{ext}"
 
         # Live peak levels, updated by the capture threads on every chunk.
         # Plain float writes are atomic under the GIL — no lock needed for a
@@ -148,7 +163,6 @@ class DualRecorder:
         driver_blocksize = _driver_blocksize(chunk_frames)
         mic = devices.get_mic(mic_name)
         loopback = devices.get_system_loopback(speaker_name)
-        sf_format = fmt.upper()
 
         self._specs = [
             TrackSpec(
@@ -160,6 +174,7 @@ class DualRecorder:
                 channels=1,
                 sample_rate=sample_rate,
                 sf_format=sf_format,
+                subtype=subtype,
                 on_level=self._set_mic_level,
             ),
             TrackSpec(
@@ -171,6 +186,7 @@ class DualRecorder:
                 channels=2,
                 sample_rate=sample_rate,
                 sf_format=sf_format,
+                subtype=subtype,
                 on_level=self._set_system_level,
             ),
         ]

@@ -52,7 +52,14 @@ _CODEC_EXT = {
 
 def _output_path(src: Path, codec: str) -> Path:
     ext = _CODEC_EXT.get(codec, codec)
-    return src.with_suffix(f".{ext}")
+    dst = src.with_suffix(f".{ext}")
+    if dst == src:
+        # The recording is already in the target container (e.g. an Opus
+        # recording being re-encoded to mono low-bitrate Opus for upload).
+        # Write to a distinct sibling so we never overwrite the original
+        # recording in place with ffmpeg's -y.
+        dst = src.with_name(f"{src.stem}.upload.{ext}")
+    return dst
 
 
 def _encoder_for(codec: str) -> str:

@@ -99,7 +99,7 @@ def record(
     format: str = typer.Option(
         None,
         "--format",
-        help="Recording format: 'flac' or 'wav' (overrides config). Default 'flac'.",
+        help="Recording format: 'opus', 'flac', or 'wav' (overrides config). Default 'opus'.",
     ),
 ) -> None:
     """Capture mic + system audio, then enqueue it for transcription."""
@@ -109,7 +109,7 @@ def record(
 
     c = cfg.load_config()
     sr = sample_rate or int(c.get("recording_sample_rate", 16000))
-    fmt = (format or c.get("recording_format", "flac")).lower()
+    fmt = (format or c.get("recording_format", "opus")).lower()
 
     typer.echo(f"Recording -> {rec_dir}")
     typer.echo(f"  mic    : {mic or '(default)'}")

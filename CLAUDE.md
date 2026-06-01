@@ -4,7 +4,7 @@ Guidance for AI coding assistants working in this repository.
 
 ## Project overview
 
-Local Windows desktop app that captures mic + system audio as two separate FLAC tracks, then auto-transcribes them with WhisperX and pyannote speaker diarization. Produces per-track `.txt` / `.srt` / `.json` plus a merged chronological Markdown transcript.
+Local Windows desktop app that captures mic + system audio as two separate compressed tracks (Opus by default; FLAC/WAV configurable), then auto-transcribes them with WhisperX and pyannote speaker diarization. Produces per-track `.txt` / `.srt` / `.json` plus a merged chronological Markdown transcript.
 
 Key design choices:
 - **SQLite is the only IPC** between GUI and worker (no sockets, no PID files).

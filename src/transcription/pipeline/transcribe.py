@@ -35,15 +35,15 @@ log = logging.getLogger(__name__)
 ProgressCb = Callable[[str], None] | None
 
 KNOWN_TRACKS = ("mic", "system")
-# Audio extensions we look for, in priority order. New recordings are FLAC;
-# older recordings are WAV and stay readable.
-TRACK_EXTS = ("flac", "wav")
+# Audio extensions we look for, in priority order. New recordings are Opus;
+# older recordings are FLAC or WAV and stay readable.
+TRACK_EXTS = ("opus", "flac", "wav")
 
 
 def find_track_file(rec_dir: Path, track: str) -> Path | None:
     """Return the audio file for `track` in `rec_dir`, or None if missing.
 
-    Looks for FLAC first (new format), then WAV (legacy recordings).
+    Looks for Opus first (new default), then FLAC, then WAV (legacy recordings).
     """
     for ext in TRACK_EXTS:
         p = rec_dir / f"{track}.{ext}"
@@ -163,7 +163,7 @@ def run_transcription(
 ) -> list[TranscriptResult]:
     """Transcribe all known tracks in a recording directory.
 
-    - Reads `mic.{flac,wav}` / `system.{flac,wav}` if they exist.
+    - Reads `mic.{opus,flac,wav}` / `system.{opus,flac,wav}` if they exist.
     - For each track:
         * Skip with a cached result if `<track>.json` is newer than the
           source audio and `force=False`.
