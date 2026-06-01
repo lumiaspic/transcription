@@ -142,6 +142,21 @@ class TestFinalizeOrphan:
         assert meta["format"] == "wav"
         assert meta["duration_seconds"] == pytest.approx(1.5, abs=0.1)
 
+    @pytest.mark.skipif(not sf.check_format("OGG", "OPUS"), reason="libsndfile built without Opus")
+    def test_records_opus_format_not_ogg_container(self, tmp_path: Path) -> None:
+        # A recovered Opus orphan must report "opus" (what `record` writes),
+        # not libsndfile's "ogg" container name.
+        d = tmp_path / "rec_opus"
+        d.mkdir()
+        n = 16_000
+        sf.write(str(d / "mic.opus"), np.zeros(n, dtype=np.float32), 16_000, format="OGG")
+        orphan = find_orphans(tmp_path)[0]
+
+        recovery.finalize_orphan(orphan, enqueue=False)
+
+        meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+        assert meta["format"] == "opus"
+
     def test_enqueues_job_in_provided_queue_by_default(self, tmp_path: Path) -> None:
         _make_orphan_dir(tmp_path, "rec_enqueue")
         orphan = find_orphans(tmp_path)[0]

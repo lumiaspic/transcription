@@ -131,6 +131,21 @@ class TestEdgeCases:
         cmd = fake_ffmpeg["calls"][0]
         assert cmd[cmd.index("-c:a") + 1] == "mp3"
 
+    def test_opus_source_re_encodes_to_distinct_path(
+        self, tmp_path: Path, fake_ffmpeg: dict[str, Any]
+    ) -> None:
+        # An oversize Opus recording re-encoded to mono Opus must NOT overwrite
+        # itself in place (ffmpeg -y on its own input would destroy the only
+        # recording). The upload copy lands at a distinct sibling.
+        src = _write_file(tmp_path / "mic.opus", size_mb=30)
+
+        result = maybe_compress_for_upload(src, max_mb=20)
+
+        assert result == tmp_path / "mic.upload.opus"
+        cmd = fake_ffmpeg["calls"][0]
+        assert cmd[-1] == str(tmp_path / "mic.upload.opus")
+        assert str(src) != cmd[-1]
+
 
 class TestCompressToOpus:
     def test_raises_compression_error_when_ffmpeg_missing(

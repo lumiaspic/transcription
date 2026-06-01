@@ -57,15 +57,19 @@ def _audio_duration(path: Path) -> float:
 
 
 def _audio_metadata(path: Path) -> tuple[int | None, str | None]:
-    """Read (sample_rate, format) from an audio file. Returns (None, None) on failure."""
+    """Read (sample_rate, format) from an audio file. Returns (None, None) on failure.
+
+    `format` is taken from the file extension — the user-facing name `record`
+    writes (e.g. "opus") — rather than libsndfile's container name, which would
+    report an Opus recording as its "ogg" container and drift from a clean stop.
+    """
+    ext = path.suffix.lstrip(".").lower() or None
     try:
         info = sf.info(str(path))
         sr = int(info.samplerate) if info.samplerate else None
-        # libsndfile returns format names like "FLAC", "WAV"; normalize to lower.
-        fmt = info.format.lower() if info.format else path.suffix.lstrip(".").lower()
-        return sr, fmt
+        return sr, ext or (info.format.lower() if info.format else None)
     except Exception:
-        return None, path.suffix.lstrip(".").lower() or None
+        return None, ext
 
 
 @dataclass

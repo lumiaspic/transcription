@@ -50,7 +50,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # (~6× smaller than 48 kHz with zero accuracy impact). Bump to 48000 if
     # you also want playback-quality archives.
     "recording_sample_rate": 16000,
-    "recording_format": "flac",  # "flac" (lossless, ~50% of WAV) | "wav"
+    # Storage format. Opus (in an Ogg container) is lossy but transparent for
+    # speech and ~10× smaller than FLAC, which keeps recordings small and well
+    # under remote-API upload caps. FLAC stays available for a lossless
+    # archive; WAV for raw uncompressed PCM.
+    "recording_format": "opus",  # "opus" (compressed) | "flac" (lossless) | "wav"
     # Remote API backend (used only when backend_mode == "remote_api").
     # Any OpenAI-compatible /audio/transcriptions endpoint works:
     #   - OpenAI       : https://api.openai.com/v1

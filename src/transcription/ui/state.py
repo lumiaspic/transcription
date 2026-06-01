@@ -83,7 +83,7 @@ class AppState:
         recorder = DualRecorder(
             rec_dir,
             sample_rate=int(c.get("recording_sample_rate", 16000)),
-            format=(c.get("recording_format") or "flac").lower(),
+            format=(c.get("recording_format") or "opus").lower(),
         )
         recorder.start()
         self.recording = RecordingState(

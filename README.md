@@ -17,7 +17,7 @@
 - Auto-transcribes both with **WhisperX**, runs **pyannote speaker diarization** on the system track.
 - Produces per-track `.txt` / `.srt` / `.json` plus a **merged chronological Markdown transcript** with globally-unique speaker labels (`MIC`, `SYSTEM_S0`, `SYSTEM_S1`).
 - Runs **entirely on your machine** by default. No upload, no cloud.
-- Records **16 kHz FLAC** out of the box — ~100 MB/h for both tracks combined, lossless, matches what Whisper and pyannote both resample to internally.
+- Records **16 kHz Opus** out of the box — compressed, roughly 10× smaller than FLAC and transparent for speech (matches the rate Whisper and pyannote both resample to internally). FLAC (lossless) and WAV stay available via config.
 
 ## Status
 
@@ -114,8 +114,8 @@ Full reference: `transcription --help` and `transcription <command> --help`.
              │                          │
              ▼                          ▼
    recordings/<id>/                Worker (same process,
-     mic.flac                       daemon thread)
-     system.flac                    - claims pending jobs atomically
+     mic.opus                       daemon thread)
+     system.opus                    - claims pending jobs atomically
      meta.json                      - keeps backend cached in VRAM
                                     - recovers orphans on startup
                                           │
@@ -154,7 +154,7 @@ Most-used keys:
 | `backend_mode`                 | (wizard)       | `local_gpu` / `local_cpu` / `remote_api`. Set by the first-run wizard.           |
 | `model`                        | `small`        | Whisper model size for the local backend (`tiny` → `large-v3`).                  |
 | `language`                     | `null`         | ISO code (`fr`, `en`, …) or `null` to auto-detect.                               |
-| `recording_format`             | `flac`         | `flac` (recommended, lossless, ~½ of WAV) or `wav`.                              |
+| `recording_format`             | `opus`         | `opus` (recommended, compressed, ~10× smaller than FLAC), `flac` (lossless), or `wav` (raw PCM). |
 | `recording_sample_rate`        | `16000`        | Hz. Whisper / pyannote both resample to 16 kHz internally — higher just wastes disk. |
 | `remote_api_base_url`          | `null`         | Used when `backend_mode=remote_api`. E.g. `https://api.groq.com/openai/v1`.      |
 | `remote_api_model`             | `null`         | Model name as the remote provider expects it (e.g. `whisper-large-v3`).          |
