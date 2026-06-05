@@ -295,15 +295,6 @@ def _build_ui() -> None:
         _setup_banner()
         # --- Recording card ---
         with ui.card().classes("w-full"):
-            with ui.row().classes("items-center justify-between w-full"):
-                ui.label(t("card.recording")).classes("card-title")
-                track_legend = ui.row().classes("items-center gap-2")
-                with track_legend:
-                    ui.html(
-                        '<span class="track-chip mic"><span class="swatch"></span>MIC</span>'
-                        '<span class="track-chip sys"><span class="swatch"></span>SYSTEM</span>'
-                    )
-                track_legend.visible = False
             with ui.row().classes("items-center gap-4"):
                 rec_dot = ui.html('<span class="rec-dot"></span>')
                 rec_dot.visible = False
@@ -315,6 +306,13 @@ def _build_ui() -> None:
                     t("rec.stop"),
                     on_click=_stop_recording_and_enqueue,
                 ).props("color=negative size=lg unelevated")
+                track_legend = ui.row().classes("items-center gap-2")
+                with track_legend:
+                    ui.html(
+                        '<span class="track-chip mic"><span class="swatch"></span>MIC</span>'
+                        '<span class="track-chip sys"><span class="swatch"></span>SYSTEM</span>'
+                    )
+                track_legend.visible = False
                 elapsed_label = (
                     ui.label(t("rec.ready"))
                     .classes("rec-timer ml-auto")

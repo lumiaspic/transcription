@@ -71,6 +71,13 @@ body, .q-page, .nicegui-content {
 
 .q-page { padding: 0; }
 
+.q-tooltip {
+  font-family: var(--font-sans) !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  padding: 6px 8px !important;
+}
+
 /* Mono everywhere we ask for it — tabular by default */
 .font-mono, .q-table td.font-mono {
   font-family: var(--font-mono) !important;

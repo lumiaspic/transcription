@@ -126,7 +126,6 @@ _CATALOG: dict[str, dict[str, str]] = {
         "banner.missing.api_key": "API key",
         "banner.open_settings": "Open settings",
         # ----- recording card -----
-        "card.recording": "Recording",
         "rec.start": "● Start",
         "rec.stop": "■ Stop",
         "rec.ready": "Ready",
@@ -139,7 +138,7 @@ _CATALOG: dict[str, dict[str, str]] = {
         "table.created": "Created",
         "table.error": "Error",
         # ----- recordings card -----
-        "card.recordings": "Recordings (recent)",
+        "card.recordings": "Recent recordings",
         "card.recordings_tip": "Audio files captured on this machine. Click 'Show in folder' to open the file location.",
         "recs.empty": "No recordings yet — press Start above to make one.",
         "recs.transcribed_tip": "Transcribed — folder contains text and subtitles.",
@@ -392,7 +391,6 @@ _CATALOG: dict[str, dict[str, str]] = {
         "banner.missing.api_key": "la clé d'API",
         "banner.open_settings": "Ouvrir les paramètres",
         # ----- recording card -----
-        "card.recording": "Enregistrement",
         "rec.start": "● Démarrer",
         "rec.stop": "■ Arrêter",
         "rec.ready": "Prêt",
@@ -405,7 +403,7 @@ _CATALOG: dict[str, dict[str, str]] = {
         "table.created": "Créé le",
         "table.error": "Erreur",
         # ----- recordings card -----
-        "card.recordings": "Enregistrements (récents)",
+        "card.recordings": "Enregistrements récents",
         "card.recordings_tip": "Fichiers audio capturés sur cette machine. Cliquez sur « Afficher dans le dossier » pour ouvrir leur emplacement.",
         "recs.empty": "Aucun enregistrement — appuyez sur Démarrer ci-dessus pour en créer un.",
         "recs.transcribed_tip": "Transcrit — le dossier contient le texte et les sous-titres.",
