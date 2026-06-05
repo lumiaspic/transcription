@@ -60,6 +60,12 @@ class TestTranslate:
         out = i18n.t("notify.recording_stopped", unrelated="x")
         assert "{elapsed}" in out  # unformatted, but no exception
 
+    def test_recent_recordings_label(self) -> None:
+        assert i18n.t("card.recordings") == "Recent recordings"
+
+        i18n.set_language("fr")
+        assert i18n.t("card.recordings") == "Enregistrements récents"
+
 
 class TestResolveAndSetLanguage:
     def test_explicit_value_wins(self) -> None:
